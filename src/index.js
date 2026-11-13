@@ -32,8 +32,7 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 process.on('SIGTERM', () => {
-  if (process.env.NODE_ENV !== 'production')
-    console.log('SIGTERM diterima, menutup server...');
+  if (process.env.NODE_ENV !== 'production') console.log('SIGTERM diterima, menutup server...');
   shutdown('SIGTERM');
 });
 process.on('SIGINT', () => shutdown('SIGINT'));

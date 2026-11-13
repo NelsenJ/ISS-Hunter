@@ -121,4 +121,3 @@ export function determineNewBadges(before, after) {
 
   return newBadges;
 }
-
