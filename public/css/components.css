@@ -1,0 +1,359 @@
+/**
+ * ISS Hunter — Components
+ */
+
+/* ==========================================================================
+   Tombol (Area Sentuh Minimal 44px, Sudut 6px, Garis Kuat)
+   ========================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
+  background-color: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background-color: var(--border-subtle);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Tombol Utama: Hanya satu per layar */
+.btn-primary {
+  background-color: var(--accent);
+  color: var(--text-on-accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.92;
+  background-color: var(--accent);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background-color: var(--border-subtle);
+  color: var(--text);
+}
+
+.btn-icon {
+  width: var(--touch-min);
+  height: var(--touch-min);
+  padding: 0;
+}
+
+/* ==========================================================================
+   Form & Input (Garis Kuat, Kontras Minimal 3:1)
+   ========================================================================== */
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+.form-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.input {
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-3);
+  background-color: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+
+.input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.form-hint {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.form-error {
+  font-size: var(--text-xs);
+  color: var(--danger);
+  min-height: 1.25rem;
+}
+
+/* ==========================================================================
+   Tabs
+   ========================================================================== */
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+}
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-3);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.tab-btn:hover {
+  color: var(--text);
+}
+
+.tab-btn[aria-selected='true'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Tag / Lencana
+   ========================================================================== */
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1;
+}
+
+.tag-dimmed {
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.tag-accent {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ==========================================================================
+   Status Server & Indikator
+   ========================================================================== */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background-color: var(--surface);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--border-strong);
+  flex-shrink: 0;
+}
+
+.status-dot[data-state='online'] {
+  background-color: var(--success);
+}
+
+.status-dot[data-state='checking'] {
+  background-color: var(--border-strong);
+}
+
+.status-dot[data-state='offline'] {
+  background-color: var(--danger);
+}
+
+/* ==========================================================================
+   Panel & Card
+   ========================================================================== */
+
+.panel {
+  background-color: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.panel-elevated {
+  box-shadow: var(--shadow-panel);
+}
+
+/* ==========================================================================
+   Kartu Hasil (3 Baris Label dan Nilai dalam Font Mono Tabular)
+   ========================================================================== */
+
+.stat-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.stat-row:last-child {
+  border-bottom: none;
+}
+
+.stat-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ==========================================================================
+   Leaderboard (Tabel Rapat, Garis Kiri Beraksen untuk Pemain)
+   ========================================================================== */
+
+.table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  text-align: left;
+}
+
+.table th {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.table tr.current-player {
+  background-color: var(--border-subtle);
+  border-left: 3px solid var(--accent);
+}
+
+.table td.col-rank {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  width: 48px;
+  color: var(--text-secondary);
+}
+
+.table td.col-score {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   Keadaan Loading, Kosong, dan Error
+   ========================================================================== */
+
+/* Kerangka statis redup, tanpa animasi dekoratif, tanpa efek berdenyut */
+.skeleton {
+  background-color: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  min-height: 1rem;
+}
+
+.state-box {
+  padding: var(--space-6);
+  text-align: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.state-box p {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}

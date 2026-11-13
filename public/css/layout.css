@@ -1,0 +1,201 @@
+/**
+ * ISS Hunter — Layouts
+ */
+
+/* ==========================================================================
+   Header Tipis (48px)
+   ========================================================================== */
+
+.site-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--header-height);
+  padding: 0 var(--space-4);
+  background-color: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 1000;
+}
+
+/* Wordmark murni tipografi, tanpa logo dekoratif */
+.brand {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--text-base);
+  color: var(--text);
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+.brand:hover {
+  color: var(--accent);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Bilah Progres Setebal 2px */
+.header-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: var(--progress-height);
+  background-color: var(--border-subtle);
+  overflow: hidden;
+}
+
+.header-progress-fill {
+  height: 100%;
+  width: 0%;
+  background-color: var(--accent);
+  transition: width var(--duration-base) var(--ease-standard);
+}
+
+/* ==========================================================================
+   Layar Masuk / Autentikasi (Satu Kolom Maksimal 360px, Tanpa Ilustrasi)
+   ========================================================================== */
+
+.auth-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - var(--header-height));
+  padding: var(--space-4);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 360px;
+  background-color: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+}
+
+.auth-header {
+  margin-bottom: var(--space-6);
+}
+
+.auth-header h1 {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+
+.auth-description {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.auth-footer {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   Tata Letak Peta & Panel Game
+   ========================================================================== */
+
+.game-viewport {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - var(--header-height));
+  overflow: hidden;
+}
+
+.map-container {
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* Panel Desktop (Satu panel kiri selebar 340px) */
+.side-panel {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  width: 340px;
+  max-height: calc(100% - var(--space-8));
+  background-color: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.side-panel-body {
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+/* Panel HP: Bottom sheet dengan 2 posisi berpindah lewat tombol, bukan gestur */
+.bottom-sheet {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .side-panel {
+    display: none;
+  }
+
+  .bottom-sheet {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: var(--surface);
+    border-top: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-panel);
+    z-index: 500;
+    max-height: 80vh;
+    transition: transform var(--duration-base) var(--ease-standard);
+  }
+
+  .bottom-sheet[data-state='collapsed'] {
+    transform: translateY(calc(100% - 64px));
+  }
+
+  .bottom-sheet[data-state='expanded'] {
+    transform: translateY(0);
+  }
+
+  .bottom-sheet-header {
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .bottom-sheet-body {
+    padding: var(--space-4);
+    overflow-y: auto;
+  }
+}
+
+/* ==========================================================================
+   Container Halaman Awal / Fallback
+   ========================================================================== */
+
+.page-container {
+  max-width: 720px;
+  margin: var(--space-8) auto;
+  padding: 0 var(--space-4);
+}

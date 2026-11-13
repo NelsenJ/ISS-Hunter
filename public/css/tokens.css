@@ -1,0 +1,119 @@
+/**
+ * ISS Hunter — Design Tokens
+ *
+ * Nilai warna kontras terhitung:
+ * - Terang: latar #F7F7F5, permukaan #FFFFFF, teks #16181D, teks sekunder #5B616E,
+ *   garis pemisah #E3E4E0, garis kuat #868B96, aksen #C2410C, teks di atas aksen #FFFFFF.
+ * - Gelap: latar #0F1115, permukaan #161920, teks #E8E9EC, teks sekunder #9BA1AD,
+ *   garis pemisah #262A33, garis kuat #6B7180, aksen #FF7A4D, teks di atas aksen #0F1115.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Palet Terang (Bawaan) */
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --text: #16181d;
+  --text-secondary: #5b616e;
+  --border-subtle: #e3e4e0;
+  --border-strong: #868b96;
+  --accent: #c2410c;
+  --text-on-accent: #ffffff;
+
+  /* Status Semantik */
+  --danger: #991b1b;
+  --success: #166534;
+
+  /* Tipografi */
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem; /* 12px */
+  --text-sm: 0.875rem; /* 14px */
+  --text-base: 1rem; /* 16px */
+  --text-lg: 1.125rem; /* 18px */
+  --text-xl: 1.25rem; /* 20px */
+  --text-2xl: 1.5rem; /* 24px */
+  --line-height-base: 1.5;
+
+  /* Skala Jarak (Kelipatan 4px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Sudut Sudut (4 sampai 6px) */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  /* Bayangan: nyaris tidak ada, hanya untuk panel melayang di atas peta */
+  --shadow-panel: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  /* Area Sentuh Minimal */
+  --touch-min: 44px;
+
+  /* Transisi Fungsional (150 - 200ms) */
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --ease-standard: ease;
+
+  /* Header */
+  --header-height: 48px;
+  --progress-height: 2px;
+}
+
+/* Preferensi Sistem: Gelap (hanya aktif jika data-theme tidak disetel ke light) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #0f1115;
+    --surface: #161920;
+    --text: #e8e9ec;
+    --text-secondary: #9ba1ad;
+    --border-subtle: #262a33;
+    --border-strong: #6b7180;
+    --accent: #ff7a4d;
+    --text-on-accent: #0f1115;
+    --danger: #f87171;
+    --success: #4ade80;
+    --shadow-panel: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Override Eksplisit: Terang */
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --text: #16181d;
+  --text-secondary: #5b616e;
+  --border-subtle: #e3e4e0;
+  --border-strong: #868b96;
+  --accent: #c2410c;
+  --text-on-accent: #ffffff;
+  --danger: #991b1b;
+  --success: #166534;
+  --shadow-panel: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Override Eksplisit: Gelap */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --surface: #161920;
+  --text: #e8e9ec;
+  --text-secondary: #9ba1ad;
+  --border-subtle: #262a33;
+  --border-strong: #6b7180;
+  --accent: #ff7a4d;
+  --text-on-accent: #0f1115;
+  --danger: #f87171;
+  --success: #4ade80;
+  --shadow-panel: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
