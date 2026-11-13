@@ -46,3 +46,4 @@ export async function leaderboardHandler(_req, res, next) {
 router.get('/', leaderboardHandler);
 
 export default router;
+

@@ -11,16 +11,29 @@ try {
 }
 
 const server = app.listen(config.port, () => {
-  console.log(`ISS Hunter berjalan di port ${config.port} (${config.nodeEnv})`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`ISS Hunter berjalan di port ${config.port} (${config.nodeEnv})`);
+  }
 });
 
-// Hosting biasa mengirim SIGTERM saat deploy ulang; tutup dengan rapi supaya permintaan
-// yang sedang berjalan selesai.
+// Graceful shutdown
 function shutdown(signal) {
   console.log(`${signal} diterima, menutup server...`);
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 10_000).unref();
 }
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+// Global error handling
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+process.on('SIGTERM', () => {
+  if (process.env.NODE_ENV !== 'production')
+    console.log('SIGTERM diterima, menutup server...');
+  shutdown('SIGTERM');
+});
 process.on('SIGINT', () => shutdown('SIGINT'));
