@@ -17,57 +17,40 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/css/style.css" />
+    <!-- Supabase JS UMD dengan pin versi tepat dan SRI integrity -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"
+      integrity="sha384-uteMfOloLDGt042uDz+xHGF3ym63/WQ6rFq7murQRG8Ih7QrXGEGNtWd8688sb4O"
+      crossorigin="anonymous"
+    ></script>
   </head>
   <body>
     <header class="site-header">
       <a class="brand" href="/" aria-label="ISS Hunter">ISS Hunter</a>
       <div class="header-actions">
+        <div
+          id="header-player-info"
+          style="display: inline-flex; align-items: center; gap: var(--space-2)"
+        ></div>
         <div id="server-status" class="status-pill" role="status">
           <span class="status-dot" data-state="checking" aria-hidden="true"></span>
-          <span id="server-status-text">Memeriksa server…</span>
+          <span id="server-status-text">Memeriksa…</span>
         </div>
         <button type="button" id="theme-toggle-btn" class="btn btn-ghost" aria-label="Ganti tema">
           <span class="theme-label">Tema</span>
         </button>
       </div>
       <div class="header-progress-bar" aria-hidden="true">
-        <div id="header-progress-fill" class="header-progress-fill" style="width: 20%"></div>
+        <div id="header-progress-fill" class="header-progress-fill" style="width: 0%"></div>
       </div>
     </header>
 
-    <main class="page-container">
-      <section class="panel" style="margin-bottom: var(--space-6)">
-        <h1 style="margin-bottom: var(--space-2)">Tebak Posisi ISS</h1>
-        <p style="color: var(--text-secondary); margin-bottom: var(--space-4)">
-          Stasiun Luar Angkasa Internasional bergerak dengan kecepatan sekitar 7,6 km per detik.
-          Tebak titik koordinatnya 10 menit ke depan berdasarkan jejak orbitnya.
-        </p>
-
-        <div class="stat-list">
-          <div class="stat-row">
-            <span class="stat-label">Status Server</span>
-            <span id="stat-server" class="stat-value">Memeriksa…</span>
-          </div>
-          <div class="stat-row">
-            <span class="stat-label">Konfigurasi Supabase</span>
-            <span id="stat-config" class="stat-value">Memeriksa…</span>
-          </div>
-          <div class="stat-row">
-            <span class="stat-label">Fase Pengembangan</span>
-            <span class="stat-value">Fase 1 (Fondasi)</span>
-          </div>
+    <main id="app-container" class="main-content">
+      <div class="page-container">
+        <div class="panel">
+          <p style="color: var(--text-secondary)">Memuat aplikasi…</p>
         </div>
-      </section>
-
-      <section class="panel">
-        <h2 style="margin-bottom: var(--space-2); font-size: var(--text-base)">
-          Peta dan Ronde Permainan
-        </h2>
-        <p style="color: var(--text-secondary); font-size: var(--text-sm)">
-          Fondasi sistem desain, keamanan header, dan endpoint API telah siap. Alur masuk akun, peta
-          satelit Leaflet, dan pembuatan ronde disiapkan pada fase berikutnya.
-        </p>
-      </section>
+      </div>
     </main>
 
     <script type="module" src="/js/main.js"></script>

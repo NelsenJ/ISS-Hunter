@@ -49,3 +49,17 @@ export async function apiRequest(
 // Pemeriksaan server dan konfigurasi publik
 export const getHealth = () => apiRequest('/api/health', { timeoutMs: 15_000 });
 export const getConfig = () => apiRequest('/api/config', { timeoutMs: 15_000 });
+
+// Profil dan autentikasi pemain
+export const createProfile = (displayName, token) =>
+  apiRequest('/api/profile', {
+    method: 'POST',
+    body: { display_name: displayName },
+    token,
+  });
+
+export const getMe = (token) =>
+  apiRequest('/api/me', {
+    method: 'GET',
+    token,
+  });

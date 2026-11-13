@@ -4,6 +4,8 @@ import express from 'express';
 import helmet from 'helmet';
 import healthRoutes from './routes/health.js';
 import configRoutes from './routes/config.js';
+import profileRoutes from './routes/profile.js';
+import meRoutes from './routes/me.js';
 import { CSP_DIRECTIVES } from './lib/csp.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
@@ -35,6 +37,8 @@ app.use(express.json({ limit: '10kb' }));
 
 app.use('/api/health', healthRoutes);
 app.use('/api/config', configRoutes);
+app.use('/api/profile', profileRoutes);
+app.use('/api/me', meRoutes);
 app.use('/api', notFoundHandler);
 app.use(errorHandler);
 
