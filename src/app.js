@@ -8,6 +8,7 @@ import profileRoutes from './routes/profile.js';
 import meRoutes from './routes/me.js';
 import roundsRoutes from './routes/rounds.js';
 import issRoutes from './routes/iss.js';
+import leaderboardRoutes from './routes/leaderboard.js';
 import { CSP_DIRECTIVES } from './lib/csp.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
@@ -43,6 +44,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/me', meRoutes);
 app.use('/api/rounds', roundsRoutes);
 app.use('/api/iss', issRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api', notFoundHandler);
 app.use(errorHandler);
 

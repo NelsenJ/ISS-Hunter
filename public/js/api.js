@@ -77,3 +77,6 @@ export const submitGuess = (roundId, { lat, lng }, token) =>
     body: { lat, lng },
     token,
   });
+
+// Leaderboard global (top 20)
+export const getLeaderboard = () => apiRequest('/api/leaderboard');

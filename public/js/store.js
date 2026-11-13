@@ -4,6 +4,7 @@
  */
 
 const PROFILE_CACHE_KEY = 'iss_cache_profile';
+const LEADERBOARD_CACHE_KEY = 'iss_cache_leaderboard';
 const DRAFT_GUESS_KEY = 'iss_draft_guess';
 const ACTIVE_ROUND_KEY = 'iss_active_round';
 
@@ -20,6 +21,7 @@ const state = {
   roundStatus: 'idle', // 'idle' | 'active' | 'submitting' | 'result'
   roundResult: null,
   roundError: null,
+  leaderboard: null,
 };
 
 const listeners = new Set();
@@ -121,6 +123,28 @@ export function setRoundStatus(status, result = null, error = null) {
   if (result) state.roundResult = result;
   if (error) state.roundError = error;
   notify();
+}
+
+export function setLeaderboardData(data) {
+  state.leaderboard = data;
+  try {
+    if (data) {
+      localStorage.setItem(LEADERBOARD_CACHE_KEY, JSON.stringify(data));
+    }
+  } catch {
+    // Abaikan jika storage dibatasi
+  }
+  notify();
+}
+
+export function loadLeaderboardCache() {
+  try {
+    const raw = localStorage.getItem(LEADERBOARD_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 export function loadProfileCache() {

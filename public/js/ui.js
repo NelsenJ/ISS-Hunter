@@ -1,7 +1,7 @@
 /**
  * ISS Hunter — UI Renderer
  * Mengatur antarmuka pengguna: auth screen, game viewport, desktop panel,
- * mobile bottom sheet, timer hitung mundur, dan integrasi peta.
+ * mobile bottom sheet, timer hitung mundur, leaderboard, dan integrasi peta.
  * Seluruh teks pengguna dirender dengan textContent untuk mencegah XSS.
  */
 
@@ -13,9 +13,11 @@ import {
   clearDraftGuess,
   setRoundStatus,
   loadSavedDraftGuess,
+  setLeaderboardData,
+  loadLeaderboardCache,
 } from './store.js';
 import { signIn, signUp, signOut } from './auth.js';
-import { createProfile, getMe, startRound, submitGuess } from './api.js';
+import { createProfile, getMe, startRound, submitGuess, getLeaderboard } from './api.js';
 import {
   initMap,
   setMapTheme,
@@ -34,7 +36,7 @@ let headerProgressFillEl = null;
 let authMode = 'login'; // 'login' | 'register' | 'profile'
 let mapInitialized = false;
 let countdownTimer = null;
-let activeTab = 'round'; // 'round' | 'stats'
+let activeTab = 'round'; // 'round' | 'leaderboard' | 'stats'
 let bottomSheetExpanded = false;
 
 export function initUI(container) {
@@ -380,7 +382,6 @@ function renderAuthScreen(state) {
 }
 
 function renderGameScreen(state) {
-  // Hanya buat container DOM peta sekali agar instans Leaflet tidak terganggu re-render
   let viewport = document.getElementById('game-viewport');
   let mapContainer = document.getElementById('map-container');
 
@@ -399,7 +400,7 @@ function renderGameScreen(state) {
     appContainer.append(viewport);
   }
 
-  // Inisialisasi peta jika belum
+  // Inisialisasi peta sekali
   if (!mapInitialized && typeof window.L !== 'undefined') {
     const theme = document.documentElement.getAttribute('data-theme') || getPreferredTheme();
     initMap(mapContainer, theme, (coords) => {
@@ -410,7 +411,6 @@ function renderGameScreen(state) {
       }
     });
 
-    // Mulai polling posisi dan jejak ISS
     startIssPolling((pos) => {
       updateIssPosition(pos);
     });
@@ -419,7 +419,6 @@ function renderGameScreen(state) {
       .then((trail) => updateIssTrail(trail))
       .catch((err) => console.warn('Gagal memuat jejak:', err.message));
 
-    // Pulihkan draft tebakan yang tersimpan jika ada
     const savedDraft = loadSavedDraftGuess();
     if (savedDraft) {
       setDraftGuess(savedDraft);
@@ -429,7 +428,16 @@ function renderGameScreen(state) {
     mapInitialized = true;
   }
 
-  // Render Panel Desktop & Mobile Bottom Sheet
+  // Ambil leaderboard jika belum ada
+  if (!state.leaderboard) {
+    const cachedLb = loadLeaderboardCache();
+    if (cachedLb) setLeaderboardData(cachedLb);
+
+    getLeaderboard()
+      .then((data) => setLeaderboardData(data))
+      .catch((err) => console.warn('Gagal memuat papan peringkat:', err.message));
+  }
+
   renderDesktopPanel(viewport, state);
   renderBottomSheet(viewport, state);
 }
@@ -445,7 +453,7 @@ function renderDesktopPanel(viewport, state) {
 
   panel.replaceChildren();
 
-  // Tab Header
+  // Tab Header: Permainan, Peringkat, Profil
   const tabHeader = document.createElement('div');
   tabHeader.className = 'tabs';
   tabHeader.style.padding = '0 var(--space-2)';
@@ -460,23 +468,35 @@ function renderDesktopPanel(viewport, state) {
     render(state);
   });
 
+  const lbTabBtn = document.createElement('button');
+  lbTabBtn.type = 'button';
+  lbTabBtn.className = 'tab-btn';
+  lbTabBtn.setAttribute('aria-selected', activeTab === 'leaderboard' ? 'true' : 'false');
+  lbTabBtn.textContent = 'Peringkat';
+  lbTabBtn.addEventListener('click', () => {
+    activeTab = 'leaderboard';
+    render(state);
+  });
+
   const statsTabBtn = document.createElement('button');
   statsTabBtn.type = 'button';
   statsTabBtn.className = 'tab-btn';
   statsTabBtn.setAttribute('aria-selected', activeTab === 'stats' ? 'true' : 'false');
-  statsTabBtn.textContent = 'Profil & Lencana';
+  statsTabBtn.textContent = 'Profil';
   statsTabBtn.addEventListener('click', () => {
     activeTab = 'stats';
     render(state);
   });
 
-  tabHeader.append(roundTabBtn, statsTabBtn);
+  tabHeader.append(roundTabBtn, lbTabBtn, statsTabBtn);
 
   const panelBody = document.createElement('div');
   panelBody.className = 'side-panel-body';
 
   if (activeTab === 'round') {
     renderRoundContent(panelBody, state);
+  } else if (activeTab === 'leaderboard') {
+    renderLeaderboardContent(panelBody, state);
   } else {
     renderStatsContent(panelBody, state);
   }
@@ -565,19 +585,65 @@ function renderRoundContent(container, state) {
     const resultBox = document.createElement('div');
     resultBox.className = 'stat-list';
 
+    // 1. Jarak
     const distRow = document.createElement('div');
     distRow.className = 'stat-row';
-    distRow.innerHTML = `<span class="stat-label">Jarak</span><span class="stat-value">${state.roundResult.distanceKm.toFixed(1)} km</span>`;
+    const distLabel = document.createElement('span');
+    distLabel.className = 'stat-label';
+    distLabel.textContent = 'Jarak';
+    const distVal = document.createElement('span');
+    distVal.className = 'stat-value tabular';
+    distVal.textContent = `${state.roundResult.distanceKm.toFixed(1)} km`;
+    distRow.append(distLabel, distVal);
 
+    // 2. Skor ronde
     const scoreRow = document.createElement('div');
     scoreRow.className = 'stat-row';
-    scoreRow.innerHTML = `<span class="stat-label">Skor Ronde</span><span class="stat-value tabular">${state.roundResult.score}</span>`;
+    const scoreLabel = document.createElement('span');
+    scoreLabel.className = 'stat-label';
+    scoreLabel.textContent = 'Skor Ronde';
+    const scoreVal = document.createElement('span');
+    scoreVal.className = 'stat-value tabular';
+    scoreVal.textContent = `${state.roundResult.score} poin`;
+    scoreRow.append(scoreLabel, scoreVal);
 
+    // 3. Total skor
     const totalRow = document.createElement('div');
     totalRow.className = 'stat-row';
-    totalRow.innerHTML = `<span class="stat-label">Total Skor</span><span class="stat-value tabular">${state.roundResult.totalScore}</span>`;
+    const totalLabel = document.createElement('span');
+    totalLabel.className = 'stat-label';
+    totalLabel.textContent = 'Total Skor';
+    const totalVal = document.createElement('span');
+    totalVal.className = 'stat-value tabular';
+    totalVal.textContent = `${state.roundResult.totalScore} poin`;
+    totalRow.append(totalLabel, totalVal);
 
     resultBox.append(distRow, scoreRow, totalRow);
+
+    // Jika ada lencana baru
+    if (state.roundResult.newBadges && state.roundResult.newBadges.length > 0) {
+      const badgeBox = document.createElement('div');
+      badgeBox.style.marginTop = 'var(--space-3)';
+      badgeBox.style.padding = 'var(--space-2) var(--space-3)';
+      badgeBox.style.border = '1px solid var(--accent)';
+      badgeBox.style.borderRadius = 'var(--radius-sm)';
+
+      const badgeHeading = document.createElement('span');
+      badgeHeading.style.fontSize = 'var(--text-xs)';
+      badgeHeading.style.color = 'var(--accent)';
+      badgeHeading.style.fontWeight = '600';
+      badgeHeading.textContent = 'Lencana Baru: ';
+
+      const badgeList = document.createElement('span');
+      badgeList.style.fontSize = 'var(--text-xs)';
+      badgeList.style.fontWeight = '500';
+      badgeList.textContent = state.roundResult.newBadges
+        .map((b) => b.charAt(0).toUpperCase() + b.slice(1))
+        .join(', ');
+
+      badgeBox.append(badgeHeading, badgeList);
+      resultBox.append(badgeBox);
+    }
 
     const nextBtn = document.createElement('button');
     nextBtn.type = 'button';
@@ -597,7 +663,6 @@ function renderRoundContent(container, state) {
   if (state.roundStatus === 'active' && state.activeRound) {
     const roundBox = document.createElement('div');
 
-    // Waktu Hitung Mundur
     const countdownWrap = document.createElement('div');
     countdownWrap.style.display = 'flex';
     countdownWrap.style.justifyContent = 'space-between';
@@ -615,7 +680,6 @@ function renderRoundContent(container, state) {
 
     countdownWrap.append(timeLabel, timeValue);
 
-    // Jalankan timer jika belum ada
     if (countdownTimer) clearInterval(countdownTimer);
     countdownTimer = setInterval(() => {
       const el = document.getElementById('countdown-timer-value');
@@ -627,7 +691,6 @@ function renderRoundContent(container, state) {
       }
     }, 1000);
 
-    // Info Koordinat Tebakan
     const guessInfo = document.createElement('div');
     guessInfo.className = 'panel';
     guessInfo.style.marginBottom = 'var(--space-4)';
@@ -635,20 +698,32 @@ function renderRoundContent(container, state) {
     if (state.draftGuess) {
       const latText = state.draftGuess.lat.toFixed(4);
       const lngText = state.draftGuess.lng.toFixed(4);
-      guessInfo.innerHTML = `
-        <div class="stat-label" style="margin-bottom:4px">Titik Tebakan:</div>
-        <div class="stat-value tabular" style="font-size:var(--text-sm)">${latText}&deg;, ${lngText}&deg;</div>
-        <div class="form-hint" style="margin-top:6px">Tekan <kbd>Esc</kbd> untuk membatalkan</div>
-      `;
+
+      const labelEl = document.createElement('div');
+      labelEl.className = 'stat-label';
+      labelEl.style.marginBottom = '4px';
+      labelEl.textContent = 'Titik Tebakan:';
+
+      const valEl = document.createElement('div');
+      valEl.className = 'stat-value tabular';
+      valEl.style.fontSize = 'var(--text-sm)';
+      valEl.textContent = `${latText}°, ${lngText}°`;
+
+      const hintEl = document.createElement('div');
+      hintEl.className = 'form-hint';
+      hintEl.style.marginTop = '6px';
+      hintEl.textContent = 'Tekan Esc untuk membatalkan penanda';
+
+      guessInfo.append(labelEl, valEl, hintEl);
     } else {
-      guessInfo.innerHTML = `
-        <div style="font-size:var(--text-sm);color:var(--text-secondary)">
-          Klik titik di peta di mana kamu memperkirakan ISS akan berada 10 menit ke depan.
-        </div>
-      `;
+      const hintText = document.createElement('div');
+      hintText.style.fontSize = 'var(--text-sm)';
+      hintText.style.color = 'var(--text-secondary)';
+      hintText.textContent =
+        'Klik titik di peta di mana kamu memperkirakan ISS akan berada 10 menit ke depan.';
+      guessInfo.append(hintText);
     }
 
-    // Tombol Kunci Tebakan
     const lockBtn = document.createElement('button');
     lockBtn.type = 'button';
     lockBtn.className = 'btn btn-primary';
@@ -662,7 +737,6 @@ function renderRoundContent(container, state) {
     return;
   }
 
-  // Keadaan Kosong (Idle)
   const emptyBox = document.createElement('div');
   emptyBox.className = 'state-box';
 
@@ -685,6 +759,73 @@ function renderRoundContent(container, state) {
   startBtn.addEventListener('click', startNewRoundAction);
 
   container.append(emptyBox, startBtn);
+}
+
+function renderLeaderboardContent(container, state) {
+  const rows = state.leaderboard;
+
+  if (!rows || rows.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'state-box';
+    const text = document.createElement('p');
+    text.textContent = 'Belum ada data pemain di papan peringkat.';
+    empty.append(text);
+    container.append(empty);
+    return;
+  }
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'table-wrapper';
+
+  const table = document.createElement('table');
+  table.className = 'table';
+
+  const thead = document.createElement('thead');
+  const trHead = document.createElement('tr');
+
+  const thRank = document.createElement('th');
+  thRank.textContent = '#';
+  thRank.style.width = '36px';
+
+  const thName = document.createElement('th');
+  thName.textContent = 'Pemain';
+
+  const thScore = document.createElement('th');
+  thScore.textContent = 'Skor';
+  thScore.style.textAlign = 'right';
+
+  trHead.append(thRank, thName, thScore);
+  thead.append(trHead);
+  table.append(thead);
+
+  const tbody = document.createElement('tbody');
+  const currentDisplayName = state.player?.displayName;
+
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    // Tandai baris milik pemain dengan border kiri beraksen
+    if (currentDisplayName && row.displayName.toLowerCase() === currentDisplayName.toLowerCase()) {
+      tr.className = 'current-player';
+    }
+
+    const tdRank = document.createElement('td');
+    tdRank.className = 'col-rank';
+    tdRank.textContent = String(row.rank);
+
+    const tdName = document.createElement('td');
+    tdName.textContent = row.displayName;
+
+    const tdScore = document.createElement('td');
+    tdScore.className = 'col-score';
+    tdScore.textContent = String(row.totalScore);
+
+    tr.append(tdRank, tdName, tdScore);
+    tbody.append(tr);
+  }
+
+  table.append(tbody);
+  wrapper.append(table);
+  container.append(wrapper);
 }
 
 function renderStatsContent(container, state) {
@@ -718,7 +859,40 @@ function renderStatsContent(container, state) {
     statList.append(row);
   }
 
-  container.append(statList);
+  // Daftar Lencana Kontur
+  const badgeSection = document.createElement('div');
+  badgeSection.style.marginTop = 'var(--space-4)';
+  badgeSection.style.paddingTop = 'var(--space-4)';
+  badgeSection.style.borderTop = '1px solid var(--border-subtle)';
+
+  const badgeTitle = document.createElement('p');
+  badgeTitle.style.fontSize = 'var(--text-sm)';
+  badgeTitle.style.fontWeight = '500';
+  badgeTitle.style.color = 'var(--text-secondary)';
+  badgeTitle.style.marginBottom = 'var(--space-2)';
+  badgeTitle.textContent = 'Lencana';
+
+  const badgeContainer = document.createElement('div');
+  badgeContainer.style.display = 'flex';
+  badgeContainer.style.gap = 'var(--space-2)';
+  badgeContainer.style.flexWrap = 'wrap';
+
+  const badgesDef = [
+    { key: 'pemula', label: 'Pemula', hint: '1 ronde selesai' },
+    { key: 'navigator', label: 'Navigator', hint: '< 500 km' },
+    { key: 'sniper', label: 'Sniper', hint: '< 100 km' },
+  ];
+
+  for (const b of badgesDef) {
+    const isEarned = Boolean(state.stats?.badges?.[b.key]);
+    const tag = document.createElement('span');
+    tag.className = isEarned ? 'tag tag-accent' : 'tag tag-dimmed';
+    tag.textContent = `${b.label} (${b.hint})`;
+    badgeContainer.append(tag);
+  }
+
+  badgeSection.append(badgeTitle, badgeContainer);
+  container.append(statList, badgeSection);
 }
 
 function formatRemainingTime(startedAt) {
@@ -763,6 +937,11 @@ async function lockGuessAction() {
     import('./store.js').then(({ setPlayerData }) => {
       setPlayerData(meData.player, meData.stats);
     });
+
+    // Refresh papan peringkat terbaru
+    getLeaderboard()
+      .then((data) => setLeaderboardData(data))
+      .catch((err) => console.warn('Gagal memuat papan peringkat:', err.message));
   } catch (err) {
     setRoundStatus('idle', null, err.message || 'Gagal mengunci tebakan.');
   }
