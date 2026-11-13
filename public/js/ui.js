@@ -1,23 +1,71 @@
 /**
  * ISS Hunter — UI Renderer
- * Mengatur antarmuka pengguna: form masuk/daftar, validasi nama saat input,
- * status profil, header interaktif, dan penanganan error.
+ * Mengatur antarmuka pengguna: auth screen, game viewport, desktop panel,
+ * mobile bottom sheet, timer hitung mundur, dan integrasi peta.
  * Seluruh teks pengguna dirender dengan textContent untuk mencegah XSS.
  */
 
-import { getState, resetStore } from './store.js';
+import {
+  getState,
+  resetStore,
+  setActiveRound,
+  setDraftGuess,
+  clearDraftGuess,
+  setRoundStatus,
+  loadSavedDraftGuess,
+} from './store.js';
 import { signIn, signUp, signOut } from './auth.js';
-import { createProfile, getMe } from './api.js';
+import { createProfile, getMe, startRound, submitGuess } from './api.js';
+import {
+  initMap,
+  setMapTheme,
+  updateIssPosition,
+  updateIssTrail,
+  setGuessMarker,
+  showRoundResult,
+  clearRoundResult,
+} from './map.js';
+import { startIssPolling, fetchIssTrail } from './iss.js';
+import { getPreferredTheme } from './theme.js';
 
 let appContainer = null;
 let headerPlayerEl = null;
 let headerProgressFillEl = null;
 let authMode = 'login'; // 'login' | 'register' | 'profile'
+let mapInitialized = false;
+let countdownTimer = null;
+let activeTab = 'round'; // 'round' | 'stats'
+let bottomSheetExpanded = false;
 
 export function initUI(container) {
   appContainer = container;
   headerPlayerEl = document.getElementById('header-player-info');
   headerProgressFillEl = document.getElementById('header-progress-fill');
+
+  // Pasang keyboard listener global: Esc menghapus tebakan, Enter mengunci
+  document.addEventListener('keydown', (e) => {
+    const state = getState();
+    if (!state.token || !state.player || state.roundStatus !== 'active') return;
+
+    if (e.key === 'Escape') {
+      clearDraftGuess();
+      setGuessMarker(null);
+    } else if (e.key === 'Enter') {
+      if (state.draftGuess && state.activeRound) {
+        lockGuessAction();
+      }
+    }
+  });
+
+  // Pantau perubahan tema untuk menyesuaikan peta dasar
+  const observer = new MutationObserver(() => {
+    const theme = document.documentElement.getAttribute('data-theme') || 'light';
+    setMapTheme(theme);
+  });
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  });
 }
 
 export function render(state = getState()) {
@@ -27,18 +75,18 @@ export function render(state = getState()) {
 
   // Jika belum login atau profil wajib dibuat
   if (!state.token || !state.player || state.profileRequired) {
+    mapInitialized = false;
+    if (countdownTimer) clearInterval(countdownTimer);
     renderAuthScreen(state);
     return;
   }
 
-  // Jika sudah login dan profil ada
-  renderDashboard(state);
+  // Jika sudah login dan memiliki profil
+  renderGameScreen(state);
 }
 
 function renderHeader(state) {
   if (!headerPlayerEl) return;
-
-  // Bersihkan elemen header player
   headerPlayerEl.replaceChildren();
 
   if (state.player) {
@@ -46,19 +94,16 @@ function renderHeader(state) {
     const progress = state.stats?.progress ?? 0;
     const progressPercent = Math.min(100, Math.max(0, (progress / 2000) * 100));
 
-    // Nama pemain
     const nameEl = document.createElement('span');
     nameEl.className = 'player-name';
     nameEl.style.fontSize = 'var(--text-sm)';
     nameEl.style.fontWeight = '500';
     nameEl.textContent = state.player.displayName;
 
-    // Badge level
     const levelEl = document.createElement('span');
     levelEl.className = 'tag tag-accent tabular';
     levelEl.textContent = `Lv. ${level}`;
 
-    // Tombol keluar
     const logoutBtn = document.createElement('button');
     logoutBtn.type = 'button';
     logoutBtn.className = 'btn btn-ghost';
@@ -101,7 +146,6 @@ function renderAuthScreen(state) {
   const description = document.createElement('p');
   description.className = 'auth-description';
 
-  // Sesuaikan judul dan deskripsi berdasarkan state dan mode
   if (state.profileRequired || authMode === 'profile') {
     title.textContent = 'Nama Tampilan';
     description.textContent = 'Pilih nama tampilan untuk melihat skor dan posisi di leaderboard.';
@@ -115,16 +159,13 @@ function renderAuthScreen(state) {
 
   header.append(title, description);
 
-  // Form
   const form = document.createElement('form');
   form.noValidate = true;
 
-  // Wadah Pesan Error Form
   const formErrorEl = document.createElement('div');
   formErrorEl.className = 'form-error';
   formErrorEl.style.marginBottom = 'var(--space-3)';
 
-  // Input Field: Email & Password (hanya jika bukan mode profile saja)
   let emailInput = null;
   let passwordInput = null;
 
@@ -156,7 +197,6 @@ function renderAuthScreen(state) {
     form.append(emailGroup, passGroup);
   }
 
-  // Input Field: Nama Tampilan (hanya saat register atau profileRequired)
   let nameInput = null;
   let nameHint = null;
 
@@ -178,7 +218,6 @@ function renderAuthScreen(state) {
     nameHint.className = 'form-hint tabular';
     nameHint.textContent = '0/20 karakter';
 
-    // Validasi realtime pada event input sesuai spesifikasi
     nameInput.addEventListener('input', () => {
       const len = nameInput.value.trim().length;
       nameHint.textContent = `${len}/20 karakter`;
@@ -195,7 +234,6 @@ function renderAuthScreen(state) {
     form.append(nameGroup);
   }
 
-  // Tombol Submit Utama
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.className = 'btn btn-primary';
@@ -212,7 +250,6 @@ function renderAuthScreen(state) {
 
   form.append(formErrorEl, submitBtn);
 
-  // Footer: Tautan ganti mode
   const footer = document.createElement('div');
   footer.className = 'auth-footer';
 
@@ -247,7 +284,6 @@ function renderAuthScreen(state) {
     footer.append(cancelLink);
   }
 
-  // Event Submit Form
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     formErrorEl.textContent = '';
@@ -343,42 +379,325 @@ function renderAuthScreen(state) {
   appContainer.append(wrapper);
 }
 
-function renderDashboard(state) {
-  appContainer.replaceChildren();
+function renderGameScreen(state) {
+  // Hanya buat container DOM peta sekali agar instans Leaflet tidak terganggu re-render
+  let viewport = document.getElementById('game-viewport');
+  let mapContainer = document.getElementById('map-container');
 
-  const container = document.createElement('div');
-  container.className = 'page-container';
+  if (!viewport || !mapContainer) {
+    appContainer.replaceChildren();
 
-  // Panel Profil & Statistik Pemain
-  const profilePanel = document.createElement('section');
-  profilePanel.className = 'panel';
-  profilePanel.style.marginBottom = 'var(--space-6)';
+    viewport = document.createElement('div');
+    viewport.id = 'game-viewport';
+    viewport.className = 'game-viewport';
 
-  const profileHeader = document.createElement('div');
-  profileHeader.style.display = 'flex';
-  profileHeader.style.justifyContent = 'space-between';
-  profileHeader.style.alignItems = 'center';
-  profileHeader.style.marginBottom = 'var(--space-4)';
+    mapContainer = document.createElement('div');
+    mapContainer.id = 'map-container';
+    mapContainer.className = 'map-container';
 
-  const greetingEl = document.createElement('h1');
-  greetingEl.style.fontSize = 'var(--text-xl)';
-  greetingEl.textContent = state.player.displayName;
+    viewport.append(mapContainer);
+    appContainer.append(viewport);
+  }
 
-  const levelTag = document.createElement('span');
-  levelTag.className = 'tag tag-accent tabular';
-  levelTag.textContent = `Tingkat ${state.stats?.level ?? 1}`;
+  // Inisialisasi peta jika belum
+  if (!mapInitialized && typeof window.L !== 'undefined') {
+    const theme = document.documentElement.getAttribute('data-theme') || getPreferredTheme();
+    initMap(mapContainer, theme, (coords) => {
+      const currentState = getState();
+      if (currentState.roundStatus === 'active') {
+        setDraftGuess(coords);
+        setGuessMarker(coords);
+      }
+    });
 
-  profileHeader.append(greetingEl, levelTag);
+    // Mulai polling posisi dan jejak ISS
+    startIssPolling((pos) => {
+      updateIssPosition(pos);
+    });
 
-  // Kartu Hasil Statistik
+    fetchIssTrail()
+      .then((trail) => updateIssTrail(trail))
+      .catch((err) => console.warn('Gagal memuat jejak:', err.message));
+
+    // Pulihkan draft tebakan yang tersimpan jika ada
+    const savedDraft = loadSavedDraftGuess();
+    if (savedDraft) {
+      setDraftGuess(savedDraft);
+      setGuessMarker(savedDraft);
+    }
+
+    mapInitialized = true;
+  }
+
+  // Render Panel Desktop & Mobile Bottom Sheet
+  renderDesktopPanel(viewport, state);
+  renderBottomSheet(viewport, state);
+}
+
+function renderDesktopPanel(viewport, state) {
+  let panel = document.getElementById('side-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'side-panel';
+    panel.className = 'side-panel';
+    viewport.append(panel);
+  }
+
+  panel.replaceChildren();
+
+  // Tab Header
+  const tabHeader = document.createElement('div');
+  tabHeader.className = 'tabs';
+  tabHeader.style.padding = '0 var(--space-2)';
+
+  const roundTabBtn = document.createElement('button');
+  roundTabBtn.type = 'button';
+  roundTabBtn.className = 'tab-btn';
+  roundTabBtn.setAttribute('aria-selected', activeTab === 'round' ? 'true' : 'false');
+  roundTabBtn.textContent = 'Permainan';
+  roundTabBtn.addEventListener('click', () => {
+    activeTab = 'round';
+    render(state);
+  });
+
+  const statsTabBtn = document.createElement('button');
+  statsTabBtn.type = 'button';
+  statsTabBtn.className = 'tab-btn';
+  statsTabBtn.setAttribute('aria-selected', activeTab === 'stats' ? 'true' : 'false');
+  statsTabBtn.textContent = 'Profil & Lencana';
+  statsTabBtn.addEventListener('click', () => {
+    activeTab = 'stats';
+    render(state);
+  });
+
+  tabHeader.append(roundTabBtn, statsTabBtn);
+
+  const panelBody = document.createElement('div');
+  panelBody.className = 'side-panel-body';
+
+  if (activeTab === 'round') {
+    renderRoundContent(panelBody, state);
+  } else {
+    renderStatsContent(panelBody, state);
+  }
+
+  panel.append(tabHeader, panelBody);
+}
+
+function renderBottomSheet(viewport, state) {
+  let sheet = document.getElementById('bottom-sheet');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'bottom-sheet';
+    sheet.className = 'bottom-sheet';
+    sheet.dataset.state = bottomSheetExpanded ? 'expanded' : 'collapsed';
+    viewport.append(sheet);
+  }
+
+  sheet.replaceChildren();
+
+  const sheetHeader = document.createElement('div');
+  sheetHeader.className = 'bottom-sheet-header';
+
+  const titleWrap = document.createElement('div');
+  titleWrap.style.display = 'flex';
+  titleWrap.style.flexDirection = 'column';
+
+  const title = document.createElement('span');
+  title.style.fontSize = 'var(--text-sm)';
+  title.style.fontWeight = '600';
+
+  if (state.roundStatus === 'active') {
+    title.textContent = 'Ronde Berjalan';
+  } else if (state.roundStatus === 'result') {
+    title.textContent = 'Hasil Ronde';
+  } else {
+    title.textContent = 'ISS Hunter';
+  }
+
+  const subtitle = document.createElement('span');
+  subtitle.style.fontSize = 'var(--text-xs)';
+  subtitle.style.color = 'var(--text-secondary)';
+  subtitle.textContent =
+    state.roundStatus === 'active' ? 'Klik peta lalu kunci tebakan' : 'Tekan untuk detail';
+
+  titleWrap.append(title, subtitle);
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className = 'btn btn-ghost btn-sm';
+  toggleBtn.textContent = bottomSheetExpanded ? 'Tutup' : 'Buka Panel';
+  toggleBtn.addEventListener('click', () => {
+    bottomSheetExpanded = !bottomSheetExpanded;
+    sheet.dataset.state = bottomSheetExpanded ? 'expanded' : 'collapsed';
+    toggleBtn.textContent = bottomSheetExpanded ? 'Tutup' : 'Buka Panel';
+  });
+
+  sheetHeader.append(titleWrap, toggleBtn);
+
+  const sheetBody = document.createElement('div');
+  sheetBody.className = 'bottom-sheet-body';
+  renderRoundContent(sheetBody, state);
+
+  sheet.append(sheetHeader, sheetBody);
+}
+
+function renderRoundContent(container, state) {
+  if (state.roundStatus === 'submitting') {
+    const loadingBox = document.createElement('div');
+    loadingBox.className = 'state-box';
+    const skeletonLine1 = document.createElement('div');
+    skeletonLine1.className = 'skeleton';
+    skeletonLine1.style.width = '70%';
+    skeletonLine1.style.height = '16px';
+    const skeletonLine2 = document.createElement('div');
+    skeletonLine2.className = 'skeleton';
+    skeletonLine2.style.width = '50%';
+    skeletonLine2.style.height = '12px';
+    const loadingText = document.createElement('p');
+    loadingText.textContent = 'Menghitung jarak dan skor di server…';
+    loadingBox.append(skeletonLine1, skeletonLine2, loadingText);
+    container.append(loadingBox);
+    return;
+  }
+
+  if (state.roundStatus === 'result' && state.roundResult) {
+    const resultBox = document.createElement('div');
+    resultBox.className = 'stat-list';
+
+    const distRow = document.createElement('div');
+    distRow.className = 'stat-row';
+    distRow.innerHTML = `<span class="stat-label">Jarak</span><span class="stat-value">${state.roundResult.distanceKm.toFixed(1)} km</span>`;
+
+    const scoreRow = document.createElement('div');
+    scoreRow.className = 'stat-row';
+    scoreRow.innerHTML = `<span class="stat-label">Skor Ronde</span><span class="stat-value tabular">${state.roundResult.score}</span>`;
+
+    const totalRow = document.createElement('div');
+    totalRow.className = 'stat-row';
+    totalRow.innerHTML = `<span class="stat-label">Total Skor</span><span class="stat-value tabular">${state.roundResult.totalScore}</span>`;
+
+    resultBox.append(distRow, scoreRow, totalRow);
+
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'btn btn-primary';
+    nextBtn.style.width = '100%';
+    nextBtn.style.marginTop = 'var(--space-4)';
+    nextBtn.textContent = 'Mulai Ronde Baru';
+    nextBtn.addEventListener('click', () => {
+      clearRoundResult();
+      startNewRoundAction();
+    });
+
+    container.append(resultBox, nextBtn);
+    return;
+  }
+
+  if (state.roundStatus === 'active' && state.activeRound) {
+    const roundBox = document.createElement('div');
+
+    // Waktu Hitung Mundur
+    const countdownWrap = document.createElement('div');
+    countdownWrap.style.display = 'flex';
+    countdownWrap.style.justifyContent = 'space-between';
+    countdownWrap.style.alignItems = 'baseline';
+    countdownWrap.style.marginBottom = 'var(--space-3)';
+
+    const timeLabel = document.createElement('span');
+    timeLabel.className = 'stat-label';
+    timeLabel.textContent = 'Batas Kunci';
+
+    const timeValue = document.createElement('span');
+    timeValue.className = 'stat-value tabular';
+    timeValue.id = 'countdown-timer-value';
+    timeValue.textContent = formatRemainingTime(state.activeRound.startedAt);
+
+    countdownWrap.append(timeLabel, timeValue);
+
+    // Jalankan timer jika belum ada
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownTimer = setInterval(() => {
+      const el = document.getElementById('countdown-timer-value');
+      const text = formatRemainingTime(state.activeRound.startedAt);
+      if (el) el.textContent = text;
+      if (text === '00:00') {
+        clearInterval(countdownTimer);
+        setRoundStatus('idle', null, 'Ronde sudah kedaluwarsa. Mulai ronde baru.');
+      }
+    }, 1000);
+
+    // Info Koordinat Tebakan
+    const guessInfo = document.createElement('div');
+    guessInfo.className = 'panel';
+    guessInfo.style.marginBottom = 'var(--space-4)';
+
+    if (state.draftGuess) {
+      const latText = state.draftGuess.lat.toFixed(4);
+      const lngText = state.draftGuess.lng.toFixed(4);
+      guessInfo.innerHTML = `
+        <div class="stat-label" style="margin-bottom:4px">Titik Tebakan:</div>
+        <div class="stat-value tabular" style="font-size:var(--text-sm)">${latText}&deg;, ${lngText}&deg;</div>
+        <div class="form-hint" style="margin-top:6px">Tekan <kbd>Esc</kbd> untuk membatalkan</div>
+      `;
+    } else {
+      guessInfo.innerHTML = `
+        <div style="font-size:var(--text-sm);color:var(--text-secondary)">
+          Klik titik di peta di mana kamu memperkirakan ISS akan berada 10 menit ke depan.
+        </div>
+      `;
+    }
+
+    // Tombol Kunci Tebakan
+    const lockBtn = document.createElement('button');
+    lockBtn.type = 'button';
+    lockBtn.className = 'btn btn-primary';
+    lockBtn.style.width = '100%';
+    lockBtn.textContent = 'Kunci Tebakan (Enter)';
+    lockBtn.disabled = !state.draftGuess;
+    lockBtn.addEventListener('click', lockGuessAction);
+
+    roundBox.append(countdownWrap, guessInfo, lockBtn);
+    container.append(roundBox);
+    return;
+  }
+
+  // Keadaan Kosong (Idle)
+  const emptyBox = document.createElement('div');
+  emptyBox.className = 'state-box';
+
+  if (state.roundError) {
+    const errorMsg = document.createElement('p');
+    errorMsg.style.color = 'var(--danger)';
+    errorMsg.textContent = state.roundError;
+    emptyBox.append(errorMsg);
+  } else {
+    const emptyMsg = document.createElement('p');
+    emptyMsg.textContent = 'Belum ada ronde berjalan. Mulai ronde untuk menebak posisi ISS.';
+    emptyBox.append(emptyMsg);
+  }
+
+  const startBtn = document.createElement('button');
+  startBtn.type = 'button';
+  startBtn.className = 'btn btn-primary';
+  startBtn.style.width = '100%';
+  startBtn.textContent = 'Mulai Ronde';
+  startBtn.addEventListener('click', startNewRoundAction);
+
+  container.append(emptyBox, startBtn);
+}
+
+function renderStatsContent(container, state) {
   const statList = document.createElement('div');
   statList.className = 'stat-list';
 
   const rows = [
+    { label: 'Pemain', value: state.player.displayName },
+    { label: 'Tingkat', value: `Lv. ${state.stats?.level ?? 1}` },
     { label: 'Total Skor', value: `${state.stats?.totalScore ?? 0} poin` },
-    { label: 'Ronde Diselesaikan', value: `${state.stats?.roundsDone ?? 0}` },
+    { label: 'Ronde Selesai', value: `${state.stats?.roundsDone ?? 0}` },
     {
-      label: 'Jarak Tebakan Terbaik',
+      label: 'Jarak Terbaik',
       value:
         state.stats?.bestDistanceKm !== null && state.stats?.bestDistanceKm !== undefined
           ? `${Number(state.stats.bestDistanceKm).toFixed(1)} km`
@@ -399,58 +718,52 @@ function renderDashboard(state) {
     statList.append(row);
   }
 
-  // Daftar Lencana
-  const badgeSection = document.createElement('div');
-  badgeSection.style.marginTop = 'var(--space-4)';
-  badgeSection.style.paddingTop = 'var(--space-4)';
-  badgeSection.style.borderTop = '1px solid var(--border-subtle)';
+  container.append(statList);
+}
 
-  const badgeTitle = document.createElement('p');
-  badgeTitle.style.fontSize = 'var(--text-sm)';
-  badgeTitle.style.fontWeight = '500';
-  badgeTitle.style.color = 'var(--text-secondary)';
-  badgeTitle.style.marginBottom = 'var(--space-2)';
-  badgeTitle.textContent = 'Lencana';
+function formatRemainingTime(startedAt) {
+  const FIVE_MINUTES_SEC = 300;
+  const elapsedSec = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+  const remaining = Math.max(0, FIVE_MINUTES_SEC - elapsedSec);
 
-  const badgeContainer = document.createElement('div');
-  badgeContainer.style.display = 'flex';
-  badgeContainer.style.gap = 'var(--space-2)';
-  badgeContainer.style.flexWrap = 'wrap';
+  const m = Math.floor(remaining / 60);
+  const s = remaining % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
-  const badgesDef = [
-    { key: 'pemula', label: 'Pemula', hint: '1 ronde selesai' },
-    { key: 'navigator', label: 'Navigator', hint: '< 500 km' },
-    { key: 'sniper', label: 'Sniper', hint: '< 100 km' },
-  ];
+async function startNewRoundAction() {
+  const state = getState();
+  if (!state.token) return;
 
-  for (const b of badgesDef) {
-    const isEarned = Boolean(state.stats?.badges?.[b.key]);
-    const tag = document.createElement('span');
-    tag.className = isEarned ? 'tag tag-accent' : 'tag tag-dimmed';
-    tag.textContent = `${b.label} (${b.hint})`;
-    badgeContainer.append(tag);
+  try {
+    const roundData = await startRound(state.token);
+    setActiveRound(roundData);
+  } catch (err) {
+    setRoundStatus('idle', null, err.message || 'Gagal memulai ronde baru.');
   }
+}
 
-  badgeSection.append(badgeTitle, badgeContainer);
-  profilePanel.append(profileHeader, statList, badgeSection);
+async function lockGuessAction() {
+  const state = getState();
+  if (!state.token || !state.activeRound || !state.draftGuess) return;
 
-  // Panel Peta (Fase 3 placeholder)
-  const mapPanel = document.createElement('section');
-  mapPanel.className = 'panel';
+  const roundId = state.activeRound.roundId;
+  const coords = state.draftGuess;
 
-  const mapHeading = document.createElement('h2');
-  mapHeading.style.fontSize = 'var(--text-base)';
-  mapHeading.style.marginBottom = 'var(--space-2)';
-  mapHeading.textContent = 'Peta dan Ronde Permainan';
+  setRoundStatus('submitting');
 
-  const mapDesc = document.createElement('p');
-  mapDesc.style.fontSize = 'var(--text-sm)';
-  mapDesc.style.color = 'var(--text-secondary)';
-  mapDesc.textContent =
-    'Sesi login berhasil diverifikasi. Peta interaktif Leaflet, posisi orbit ISS live, dan penguncian tebakan akan aktif di Fase 3.';
+  try {
+    const result = await submitGuess(roundId, coords, state.token);
+    showRoundResult(coords, { lat: result.answer.lat, lng: result.answer.lng });
+    setRoundStatus('result', result);
+    clearDraftGuess();
 
-  mapPanel.append(mapHeading, mapDesc);
-
-  container.append(profilePanel, mapPanel);
-  appContainer.append(container);
+    // Perbarui profil dan stats pemain
+    const meData = await getMe(state.token);
+    import('./store.js').then(({ setPlayerData }) => {
+      setPlayerData(meData.player, meData.stats);
+    });
+  } catch (err) {
+    setRoundStatus('idle', null, err.message || 'Gagal mengunci tebakan.');
+  }
 }

@@ -4,6 +4,8 @@
  */
 
 const PROFILE_CACHE_KEY = 'iss_cache_profile';
+const DRAFT_GUESS_KEY = 'iss_draft_guess';
+const ACTIVE_ROUND_KEY = 'iss_active_round';
 
 const state = {
   isConfigured: false,
@@ -12,6 +14,12 @@ const state = {
   player: null,
   stats: null,
   profileRequired: false,
+  activeRound: null,
+  draftGuess: null,
+  issPosition: null,
+  roundStatus: 'idle', // 'idle' | 'active' | 'submitting' | 'result'
+  roundResult: null,
+  roundError: null,
 };
 
 const listeners = new Set();
@@ -51,7 +59,6 @@ export function setPlayerData(player, stats) {
   state.stats = stats;
   state.profileRequired = false;
 
-  // Simpan salinan ke localStorage untuk tampilan cepat
   if (player) {
     try {
       localStorage.setItem(
@@ -70,11 +77,84 @@ export function setProfileRequired(required) {
   notify();
 }
 
+export function setActiveRound(round) {
+  state.activeRound = round;
+  state.roundStatus = round ? 'active' : 'idle';
+  state.roundError = null;
+
+  try {
+    if (round) {
+      localStorage.setItem(ACTIVE_ROUND_KEY, JSON.stringify(round));
+    } else {
+      localStorage.removeItem(ACTIVE_ROUND_KEY);
+    }
+  } catch {
+    // Abaikan jika storage dibatasi
+  }
+
+  notify();
+}
+
+export function setDraftGuess(coords) {
+  state.draftGuess = coords;
+
+  try {
+    if (coords) {
+      localStorage.setItem(DRAFT_GUESS_KEY, JSON.stringify(coords));
+    } else {
+      localStorage.removeItem(DRAFT_GUESS_KEY);
+    }
+  } catch {
+    // Abaikan jika storage dibatasi
+  }
+
+  notify();
+}
+
+export function setIssPosition(pos) {
+  state.issPosition = pos;
+  notify();
+}
+
+export function setRoundStatus(status, result = null, error = null) {
+  state.roundStatus = status;
+  if (result) state.roundResult = result;
+  if (error) state.roundError = error;
+  notify();
+}
+
 export function loadProfileCache() {
   try {
     const raw = localStorage.getItem(PROFILE_CACHE_KEY);
     if (!raw) return null;
     return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function loadSavedDraftGuess() {
+  try {
+    const raw = localStorage.getItem(DRAFT_GUESS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function loadSavedActiveRound() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_ROUND_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Cek apakah masih dalam batas 5 menit
+    const ageMs = Date.now() - new Date(parsed.startedAt).getTime();
+    if (ageMs > 5 * 60 * 1000) {
+      localStorage.removeItem(ACTIVE_ROUND_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -88,12 +168,36 @@ export function clearProfileCache() {
   }
 }
 
+export function clearDraftGuess() {
+  try {
+    localStorage.removeItem(DRAFT_GUESS_KEY);
+    state.draftGuess = null;
+    notify();
+  } catch {
+    // Abaikan jika storage dibatasi
+  }
+}
+
 export function resetStore() {
   state.user = null;
   state.token = null;
   state.player = null;
   state.stats = null;
   state.profileRequired = false;
+  state.activeRound = null;
+  state.draftGuess = null;
+  state.issPosition = null;
+  state.roundStatus = 'idle';
+  state.roundResult = null;
+  state.roundError = null;
+
   clearProfileCache();
+  clearDraftGuess();
+  try {
+    localStorage.removeItem(ACTIVE_ROUND_KEY);
+  } catch {
+    // Abaikan jika storage dibatasi
+  }
+
   notify();
 }

@@ -63,3 +63,17 @@ export const getMe = (token) =>
     method: 'GET',
     token,
   });
+
+// Ronde permainan
+export const startRound = (token) =>
+  apiRequest('/api/rounds', {
+    method: 'POST',
+    token,
+  });
+
+export const submitGuess = (roundId, { lat, lng }, token) =>
+  apiRequest(`/api/rounds/${roundId}/guess`, {
+    method: 'POST',
+    body: { lat, lng },
+    token,
+  });
