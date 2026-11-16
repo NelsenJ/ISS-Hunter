@@ -451,3 +451,75 @@ test('GET /api/leaderboard mengembalikan 20 pemain teratas dan header Cache-Cont
   assert.equal(res.body.data[1].rank, 2);
   assert.equal(res.body.data[1].displayName, 'JuaraDua');
 });
+
+test('GET /api/leaderboard?type=average mengkueri view leaderboard_average dan mengurutkan avg_score', async () => {
+  const mockRows = [
+    { display_name: 'PakarOrbit', avg_score: 950.5, rounds_done: 8, best_distance_km: 25.0 },
+  ];
+
+  const mockSupabase = {
+    from(table) {
+      assert.equal(table, 'leaderboard_average');
+      return {
+        select() {
+          return {
+            order(col) {
+              assert.equal(col, 'avg_score');
+              return {
+                limit() {
+                  return { data: mockRows, error: null };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  setSupabaseClient(mockSupabase);
+
+  const req = { query: { type: 'average' } };
+  const res = createMockResponse();
+  await leaderboardHandler(req, res, () => {});
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.data.length, 1);
+  assert.equal(res.body.data[0].avgScore, 950.5);
+});
+
+test('GET /api/leaderboard?type=today mengkueri view leaderboard_today', async () => {
+  const mockRows = [
+    { display_name: 'HariIniJuara', total_score: 3000, rounds_done: 4, best_distance_km: 50.0 },
+  ];
+
+  const mockSupabase = {
+    from(table) {
+      assert.equal(table, 'leaderboard_today');
+      return {
+        select() {
+          return {
+            order(col) {
+              assert.equal(col, 'total_score');
+              return {
+                limit() {
+                  return { data: mockRows, error: null };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  setSupabaseClient(mockSupabase);
+
+  const req = { query: { type: 'today' } };
+  const res = createMockResponse();
+  await leaderboardHandler(req, res, () => {});
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.data.length, 1);
+  assert.equal(res.body.data[0].displayName, 'HariIniJuara');
+});

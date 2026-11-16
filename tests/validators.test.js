@@ -5,6 +5,9 @@ import {
   validateCoordinates,
   validateRoundId,
   usernameToEmail,
+  validateHorizonSeconds,
+  validateDifficulty,
+  validateLeaderboardType,
 } from '../src/validators.js';
 
 test('validateDisplayName menerima nama 3 sampai 20 karakter', () => {
@@ -100,4 +103,45 @@ test('usernameToEmail menghasilkan format email deterministik yang aman', () => 
   assert.equal(usernameToEmail('  Budi  '), 'budi@isshunter.app');
   assert.equal(usernameToEmail('Kapten_ISS'), 'kapten_5fiss@isshunter.app');
   assert.equal(usernameToEmail('user 123'), 'user_20123@isshunter.app');
+});
+
+test('validateHorizonSeconds menerima horizon sah dan memberikan nilai bawaan', () => {
+  assert.equal(validateHorizonSeconds(undefined), 600);
+  assert.equal(validateHorizonSeconds(null), 600);
+  assert.equal(validateHorizonSeconds(''), 600);
+  assert.equal(validateHorizonSeconds(120), 120);
+  assert.equal(validateHorizonSeconds('600'), 600);
+  assert.equal(validateHorizonSeconds(1800), 1800);
+  assert.equal(validateHorizonSeconds(5400), 5400);
+
+  assert.throws(
+    () => validateHorizonSeconds(999),
+    (err) => err.code === 'INVALID_HORIZON' && err.status === 400,
+  );
+});
+
+test('validateDifficulty menerima tingkat kesulitan sah dan memberikan nilai bawaan', () => {
+  assert.equal(validateDifficulty(undefined), 'normal');
+  assert.equal(validateDifficulty(null), 'normal');
+  assert.equal(validateDifficulty(''), 'normal');
+  assert.equal(validateDifficulty('easy'), 'easy');
+  assert.equal(validateDifficulty('NORMAL'), 'normal');
+  assert.equal(validateDifficulty('hard'), 'hard');
+  assert.equal(validateDifficulty('expert'), 'expert');
+
+  assert.throws(
+    () => validateDifficulty('impossible'),
+    (err) => err.code === 'INVALID_DIFFICULTY' && err.status === 400,
+  );
+});
+
+test('validateLeaderboardType menerima tipe sah dan memberikan nilai bawaan', () => {
+  assert.equal(validateLeaderboardType(undefined), 'total');
+  assert.equal(validateLeaderboardType('average'), 'average');
+  assert.equal(validateLeaderboardType('today'), 'today');
+
+  assert.throws(
+    () => validateLeaderboardType('invalid-type'),
+    (err) => err.code === 'INVALID_LEADERBOARD_TYPE' && err.status === 400,
+  );
 });

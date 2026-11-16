@@ -180,17 +180,31 @@ test('POST /api/rounds membuat ronde baru dengan status 201 jika tidak ada ronde
         return {
           select() {
             return {
-              eq() {
+              eq(_col1, _val1) {
                 return {
-                  async eq() {
-                    return { data: [], error: null }; // Tidak ada ronde open
+                  eq(_col2, val2) {
+                    if (val2 === 'done') {
+                      return {
+                        order() {
+                          return {
+                            limit() {
+                              return {
+                                async maybeSingle() {
+                                  return { data: null, error: null };
+                                },
+                              };
+                            },
+                          };
+                        },
+                      };
+                    }
+                    return Promise.resolve({ data: [], error: null }); // Tidak ada ronde open
                   },
                 };
               },
             };
           },
-          insert({ _player_id, target_ts, status }) {
-            assert.equal(status, 'open');
+          insert({ target_ts }) {
             return {
               select() {
                 return {
@@ -200,6 +214,8 @@ test('POST /api/rounds membuat ronde baru dengan status 201 jika tidak ada ronde
                         id: 101,
                         target_ts,
                         created_at: new Date().toISOString(),
+                        horizon_seconds: 600,
+                        difficulty: 'normal',
                       },
                       error: null,
                     };
@@ -309,10 +325,25 @@ test('POST /api/rounds menandai ronde > 5 menit sebagai expired lalu membuat ron
         return {
           select() {
             return {
-              eq() {
+              eq(_col1, _val1) {
                 return {
-                  async eq() {
-                    return {
+                  eq(_col2, val2) {
+                    if (val2 === 'done') {
+                      return {
+                        order() {
+                          return {
+                            limit() {
+                              return {
+                                async maybeSingle() {
+                                  return { data: null, error: null };
+                                },
+                              };
+                            },
+                          };
+                        },
+                      };
+                    }
+                    return Promise.resolve({
                       data: [
                         {
                           id: 88,
@@ -322,7 +353,7 @@ test('POST /api/rounds menandai ronde > 5 menit sebagai expired lalu membuat ron
                         },
                       ],
                       error: null,
-                    };
+                    });
                   },
                 };
               },
@@ -352,6 +383,8 @@ test('POST /api/rounds menandai ronde > 5 menit sebagai expired lalu membuat ron
                         id: 89,
                         target_ts,
                         created_at: new Date().toISOString(),
+                        horizon_seconds: 600,
+                        difficulty: 'normal',
                       },
                       error: null,
                     };
@@ -399,9 +432,24 @@ test('POST /api/rounds menangkap error 23505 race condition dan mengembalikan ro
         return {
           select() {
             return {
-              eq() {
+              eq(_col1, _val1) {
                 return {
-                  eq() {
+                  eq(_col2, val2) {
+                    if (val2 === 'done') {
+                      return {
+                        order() {
+                          return {
+                            limit() {
+                              return {
+                                async maybeSingle() {
+                                  return { data: null, error: null };
+                                },
+                              };
+                            },
+                          };
+                        },
+                      };
+                    }
                     return {
                       then(resolve) {
                         resolve({ data: [], error: null });
@@ -412,6 +460,8 @@ test('POST /api/rounds menangkap error 23505 race condition dan mengembalikan ro
                             id: 77,
                             target_ts: 1700000000,
                             created_at: new Date().toISOString(),
+                            horizon_seconds: 600,
+                            difficulty: 'normal',
                           },
                           error: null,
                         };
@@ -531,6 +581,8 @@ test('GET /api/rounds/active mengembalikan ronde terbuka jika masih dalam batas 
     roundId: 99,
     targetTs: 1700000600,
     startedAt: recentStartedAt,
+    horizonSeconds: 600,
+    difficulty: 'normal',
   });
 });
 
@@ -588,4 +640,143 @@ test('GET /api/rounds/active menandai expired dan mengembalikan data: null jika 
   assert.equal(res.body.ok, true);
   assert.equal(res.body.data, null);
   assert.equal(updatedStatus, 'expired');
+});
+
+test('POST /api/rounds menolak pembuatan ronde jika dalam masa cooldown 10 detik (429)', async () => {
+  const recentFinishedAt = new Date(Date.now() - 3 * 1000).toISOString(); // 3 detik lalu
+  const mockSupabase = {
+    from(table) {
+      if (table === 'profiles') {
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  async maybeSingle() {
+                    return { data: { id: 'usr-1' }, error: null };
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
+      if (table === 'rounds') {
+        return {
+          select() {
+            return {
+              eq(_col1, _val1) {
+                return {
+                  eq(_col2, val2) {
+                    if (val2 === 'done') {
+                      return {
+                        order() {
+                          return {
+                            limit() {
+                              return {
+                                async maybeSingle() {
+                                  return {
+                                    data: { finished_at: recentFinishedAt },
+                                    error: null,
+                                  };
+                                },
+                              };
+                            },
+                          };
+                        },
+                      };
+                    }
+                    return Promise.resolve({ data: [], error: null });
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    },
+  };
+  setSupabaseClient(mockSupabase);
+
+  const req = { playerId: 'usr-1', body: {} };
+  const res = createMockResponse();
+  let receivedError = null;
+
+  await createRoundHandler(req, res, (err) => {
+    receivedError = err;
+  });
+
+  assert.ok(receivedError);
+  assert.equal(receivedError.status, 429);
+  assert.equal(receivedError.code, 'ROUND_COOLDOWN');
+});
+
+test('POST /api/rounds menolak tingkat kesulitan atau horizon yang terkunci untuk level pemain (400)', async () => {
+  const mockSupabase = {
+    from(table) {
+      if (table === 'profiles') {
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  async maybeSingle() {
+                    return { data: { id: 'usr-1' }, error: null };
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
+      if (table === 'rounds') {
+        return {
+          select() {
+            return {
+              eq(_col1, _val1) {
+                return {
+                  eq() {
+                    return Promise.resolve({ data: [], error: null });
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
+      if (table === 'player_stats') {
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  async maybeSingle() {
+                    return { data: { total_score: 500 }, error: null }; // Level 1
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    },
+  };
+  setSupabaseClient(mockSupabase);
+
+  const req = {
+    playerId: 'usr-1',
+    body: { difficulty: 'hard' }, // Membutuhkan Level 3
+  };
+  const res = createMockResponse();
+  let receivedError = null;
+
+  await createRoundHandler(req, res, (err) => {
+    receivedError = err;
+  });
+
+  assert.ok(receivedError);
+  assert.equal(receivedError.status, 400);
+  assert.equal(receivedError.code, 'DIFFICULTY_LOCKED');
 });

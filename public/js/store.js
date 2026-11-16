@@ -8,6 +8,25 @@ const LEADERBOARD_CACHE_KEY = 'iss_cache_leaderboard';
 const DRAFT_GUESS_KEY = 'iss_draft_guess';
 const ACTIVE_ROUND_KEY = 'iss_active_round';
 const TUTORIAL_DONE_KEY = 'iss_tutorial_done';
+const PREF_HORIZON_KEY = 'iss_pref_horizon';
+const PREF_DIFF_KEY = 'iss_pref_diff';
+
+function getStoredNumber(key, fallback) {
+  try {
+    const val = localStorage.getItem(key);
+    return val ? Number(val) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getStoredString(key, fallback) {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 const state = {
   isConfigured: false,
@@ -23,6 +42,9 @@ const state = {
   roundResult: null,
   roundError: null,
   leaderboard: null,
+  leaderboardType: 'total', // 'total' | 'average' | 'today'
+  preferredHorizon: getStoredNumber(PREF_HORIZON_KEY, 600),
+  preferredDifficulty: getStoredString(PREF_DIFF_KEY, 'normal'),
   isPractice: false,
   practiceResult: null,
   tutorialDone: false,
@@ -225,6 +247,33 @@ export function setTutorialDone(done = true) {
   } catch {
     // Abaikan jika storage dibatasi
   }
+  notify();
+}
+
+export function setPreferredHorizon(horizon) {
+  const h = Number(horizon) || 600;
+  state.preferredHorizon = h;
+  try {
+    localStorage.setItem(PREF_HORIZON_KEY, String(h));
+  } catch {
+    // Abaikan
+  }
+  notify();
+}
+
+export function setPreferredDifficulty(diff) {
+  const d = diff || 'normal';
+  state.preferredDifficulty = d;
+  try {
+    localStorage.setItem(PREF_DIFF_KEY, d);
+  } catch {
+    // Abaikan
+  }
+  notify();
+}
+
+export function setLeaderboardType(type) {
+  state.leaderboardType = type || 'total';
   notify();
 }
 

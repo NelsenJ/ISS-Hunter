@@ -68,13 +68,16 @@ export async function getIssPositionNow() {
 }
 
 /**
- * Mengambil jejak lintasan 10 menit terakhir (10 titik, per 60 detik).
+ * Mengambil jejak lintasan terakhir (10 titik) disesuaikan dengan horizon waktu.
+ *
+ * @param {number} [horizonSeconds=600]
  */
-export async function getIssTrail() {
+export async function getIssTrail(horizonSeconds = 600) {
   const nowTs = Math.floor(Date.now() / 1000);
+  const intervalSeconds = Math.max(1, Math.floor(horizonSeconds / 10));
   const timestamps = [];
   for (let i = 9; i >= 0; i--) {
-    timestamps.push(nowTs - i * 60);
+    timestamps.push(nowTs - i * intervalSeconds);
   }
 
   const url = `${ISS_API_BASE_URL}/positions?timestamps=${timestamps.join(',')}`;

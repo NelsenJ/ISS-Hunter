@@ -18,6 +18,9 @@ import {
   isTutorialDone,
   setPracticeMode,
   setPracticeResult,
+  setPreferredHorizon,
+  setPreferredDifficulty,
+  setLeaderboardType,
 } from './store.js';
 import { signIn, signUp, signOut } from './auth.js';
 import {
@@ -38,6 +41,7 @@ import {
   clearRoundResult,
   enablePracticeGuide,
   clearPracticeGuide,
+  setMapDifficulty,
 } from './map.js';
 import { startInteractiveTutorial, isTutorialActive } from './tutorial.js';
 import {
@@ -45,6 +49,7 @@ import {
   fetchIssTrail,
   fetchCurrentIssPosition,
   setOnTrailUpdate,
+  setTrailHorizon,
 } from './iss.js';
 import { getPreferredTheme } from './theme.js';
 
@@ -510,7 +515,7 @@ function renderGameScreen(state) {
     const cachedLb = loadLeaderboardCache();
     if (cachedLb) setLeaderboardData(cachedLb);
 
-    getLeaderboard()
+    getLeaderboard(state.leaderboardType || 'total')
       .then((data) => setLeaderboardData(data))
       .catch((err) => console.warn('Gagal memuat papan peringkat:', err.message));
   }
@@ -900,7 +905,7 @@ function renderRoundContent(container, state) {
     distVal.textContent = `${state.roundResult.distanceKm.toFixed(1)} km`;
     distRow.append(distLabel, distVal);
 
-    // 2. Skor ronde
+    // 2. Skor ronde (dengan animasi hitung naik)
     const scoreRow = document.createElement('div');
     scoreRow.className = 'stat-row';
     const scoreLabel = document.createElement('span');
@@ -908,7 +913,31 @@ function renderRoundContent(container, state) {
     scoreLabel.textContent = 'Skor Ronde';
     const scoreVal = document.createElement('span');
     scoreVal.className = 'stat-value tabular';
-    scoreVal.textContent = `${state.roundResult.score} poin`;
+
+    const targetScore = state.roundResult.score;
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion || targetScore === 0) {
+      scoreVal.textContent = `${targetScore} poin`;
+    } else {
+      scoreVal.textContent = '0 poin';
+      const duration = 800;
+      const startTime = performance.now();
+      const countUp = (now) => {
+        const progress = Math.min(1, (now - startTime) / duration);
+        const current = Math.floor(targetScore * progress);
+        scoreVal.textContent = `${current} poin`;
+        if (progress < 1) {
+          requestAnimationFrame(countUp);
+        } else {
+          scoreVal.textContent = `${targetScore} poin`;
+        }
+      };
+      requestAnimationFrame(countUp);
+    }
     scoreRow.append(scoreLabel, scoreVal);
 
     // 3. Total skor
@@ -938,16 +967,49 @@ function renderRoundContent(container, state) {
       badgeHeading.style.fontWeight = '600';
       badgeHeading.textContent = 'Lencana Baru: ';
 
+      const badgeMap = {
+        pemula: 'Pemula Orbit',
+        navigator: 'Navigator Angkasa',
+        sniper: 'Sniper Presisi',
+        orbitPenuh: 'Orbit Penuh (90m)',
+        tanpaJejak: 'Tanpa Jejak (Pakar)',
+      };
+
       const badgeList = document.createElement('span');
       badgeList.style.fontSize = 'var(--text-xs)';
       badgeList.style.fontWeight = '500';
       badgeList.textContent = state.roundResult.newBadges
-        .map((b) => b.charAt(0).toUpperCase() + b.slice(1))
+        .map((b) => badgeMap[b] || b.charAt(0).toUpperCase() + b.slice(1))
         .join(', ');
 
       badgeBox.append(badgeHeading, badgeList);
       resultBox.append(badgeBox);
     }
+
+    // Fakta edukatif acak (C6)
+    const factText =
+      state.roundResult.educationalFact ||
+      'ISS mengorbit Bumi sekitar 16 kali setiap 24 jam dengan kecepatan ~27.600 km/jam!';
+    const factBox = document.createElement('div');
+    factBox.className = 'panel';
+    factBox.style.marginTop = 'var(--space-3)';
+    factBox.style.backgroundColor = 'var(--surface-hover)';
+
+    const factTitle = document.createElement('div');
+    factTitle.style.fontSize = 'var(--text-xs)';
+    factTitle.style.fontWeight = '600';
+    factTitle.style.color = 'var(--accent)';
+    factTitle.style.marginBottom = '4px';
+    factTitle.textContent = 'Fakta Orbit Edukatif:';
+
+    const factContent = document.createElement('p');
+    factContent.style.fontSize = 'var(--text-xs)';
+    factContent.style.color = 'var(--text-secondary)';
+    factContent.style.lineHeight = '1.45';
+    factContent.textContent = factText;
+
+    factBox.append(factTitle, factContent);
+    resultBox.append(factBox);
 
     const nextBtn = document.createElement('button');
     nextBtn.type = 'button';
@@ -985,14 +1047,43 @@ function renderRoundContent(container, state) {
 
     countdownWrap.append(timeLabel, timeValue);
 
+    const horizonSec = state.activeRound.horizonSeconds || 600;
+    const horizonMin = Math.round(horizonSec / 60);
+    const diff = state.activeRound.difficulty || 'normal';
+    const diffLabels = {
+      easy: 'Mudah (×0.5)',
+      normal: 'Normal (×1.0)',
+      hard: 'Sulit (×1.5)',
+      expert: 'Pakar (×2.0)',
+    };
+
+    const modeBadge = document.createElement('div');
+    modeBadge.style.fontSize = 'var(--text-xs)';
+    modeBadge.style.color = 'var(--accent)';
+    modeBadge.style.fontWeight = '600';
+    modeBadge.style.marginBottom = 'var(--space-2)';
+    modeBadge.textContent = `Mode: +${horizonMin} Menit • ${diffLabels[diff] || diff}`;
+
     const timerNote = document.createElement('p');
     timerNote.className = 'form-hint';
     timerNote.style.marginBottom = 'var(--space-3)';
     timerNote.style.lineHeight = '1.4';
-    timerNote.textContent =
-      'Hasil dan skor langsung dihitung seketika setelah kamu mengunci tebakan.';
 
-    roundBox.append(countdownWrap, timerNote);
+    if (diff === 'expert') {
+      timerNote.textContent =
+        'Mode Pakar: Jejak lintasan dan panah arah disembunyikan. Hasil dihitung seketika saat dikunci.';
+    } else if (diff === 'easy') {
+      timerNote.textContent =
+        'Mode Mudah: Perkiraan garis orbit ditampilkan pada peta. Hasil dihitung seketika saat dikunci.';
+    } else if (horizonSec === 5400) {
+      timerNote.textContent =
+        'Horizon 90 Menit (1 Orbit): Ingat, Bumi berputar ~23° ke timur selama 1 orbit ISS!';
+    } else {
+      timerNote.textContent =
+        'Hasil dan skor langsung dihitung seketika setelah kamu mengunci tebakan.';
+    }
+
+    roundBox.append(countdownWrap, modeBadge, timerNote);
 
     if (countdownTimer) clearInterval(countdownTimer);
     countdownTimer = setInterval(() => {
@@ -1033,8 +1124,7 @@ function renderRoundContent(container, state) {
       const hintText = document.createElement('div');
       hintText.style.fontSize = 'var(--text-sm)';
       hintText.style.color = 'var(--text-secondary)';
-      hintText.textContent =
-        'Klik titik di peta di mana kamu memperkirakan ISS akan berada 10 menit ke depan.';
+      hintText.textContent = `Klik titik di peta di mana kamu memperkirakan ISS akan berada ${horizonMin} menit ke depan.`;
       guessInfo.append(hintText);
     }
 
@@ -1046,7 +1136,7 @@ function renderRoundContent(container, state) {
     lockBtn.disabled = !state.draftGuess;
     lockBtn.addEventListener('click', lockGuessAction);
 
-    roundBox.append(countdownWrap, guessInfo, lockBtn);
+    roundBox.append(guessInfo, lockBtn);
     container.append(roundBox);
     return;
   }
@@ -1061,9 +1151,122 @@ function renderRoundContent(container, state) {
     emptyBox.append(errorMsg);
   } else {
     const emptyMsg = document.createElement('p');
-    emptyMsg.textContent = 'Belum ada ronde berjalan. Mulai ronde untuk menebak posisi ISS.';
+    emptyMsg.textContent = 'Pilih pengaturan ronde di bawah untuk mulai menebak posisi ISS:';
     emptyBox.append(emptyMsg);
   }
+
+  // Pengaturan Horizon & Kesulitan (C3 & C4)
+  const currentLevel =
+    state.stats?.level ||
+    state.player?.level ||
+    Math.floor((state.stats?.totalScore || 0) / 2000) + 1;
+
+  const setupCard = document.createElement('div');
+  setupCard.className = 'panel';
+  setupCard.style.marginBottom = 'var(--space-3)';
+
+  const horizonTitle = document.createElement('div');
+  horizonTitle.className = 'stat-label';
+  horizonTitle.style.fontWeight = '600';
+  horizonTitle.style.marginBottom = 'var(--space-2)';
+  horizonTitle.textContent = 'Horizon Waktu Prediksi:';
+
+  const horizonGrid = document.createElement('div');
+  horizonGrid.style.display = 'grid';
+  horizonGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+  horizonGrid.style.gap = 'var(--space-2)';
+  horizonGrid.style.marginBottom = 'var(--space-3)';
+
+  const horizonOptions = [
+    { seconds: 120, label: '+2 Menit', minLevel: 1, desc: 'Jarak dekat' },
+    { seconds: 600, label: '+10 Menit', minLevel: 1, desc: 'Standar (~4.600 km)' },
+    { seconds: 1800, label: '+30 Menit', minLevel: 2, desc: '1/3 orbit Bumi' },
+    { seconds: 5400, label: '+90 Menit', minLevel: 4, desc: '1 orbit penuh' },
+  ];
+
+  for (const opt of horizonOptions) {
+    const isLocked = currentLevel < opt.minLevel;
+    const isSelected = (state.preferredHorizon || 600) === opt.seconds;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `btn btn-sm ${isSelected ? 'btn-primary' : 'btn-secondary'}`;
+    btn.style.display = 'flex';
+    btn.style.flexDirection = 'column';
+    btn.style.alignItems = 'center';
+    btn.style.gap = '2px';
+    btn.style.padding = 'var(--space-2)';
+    btn.disabled = isLocked;
+
+    const mainText = document.createElement('span');
+    mainText.style.fontWeight = '600';
+    mainText.textContent = opt.label;
+
+    const subText = document.createElement('span');
+    subText.style.fontSize = '10px';
+    subText.style.opacity = '0.85';
+    subText.textContent = isLocked ? `🔒 Lv. ${opt.minLevel}` : opt.desc;
+
+    btn.append(mainText, subText);
+    btn.addEventListener('click', () => {
+      setPreferredHorizon(opt.seconds);
+      setTrailHorizon(opt.seconds);
+    });
+
+    horizonGrid.append(btn);
+  }
+
+  const diffTitle = document.createElement('div');
+  diffTitle.className = 'stat-label';
+  diffTitle.style.fontWeight = '600';
+  diffTitle.style.marginBottom = 'var(--space-2)';
+  diffTitle.textContent = 'Tingkat Kesulitan:';
+
+  const diffGrid = document.createElement('div');
+  diffGrid.style.display = 'grid';
+  diffGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+  diffGrid.style.gap = 'var(--space-2)';
+
+  const diffOptions = [
+    { key: 'easy', label: 'Mudah', minLevel: 1, mult: '×0.5', desc: 'Garis bantu arah' },
+    { key: 'normal', label: 'Normal', minLevel: 1, mult: '×1.0', desc: 'Jejak orbit biasa' },
+    { key: 'hard', label: 'Sulit', minLevel: 3, mult: '×1.5', desc: 'Peluruhan 900 km' },
+    { key: 'expert', label: 'Pakar', minLevel: 5, mult: '×2.0', desc: 'Tanpa jejak & panah' },
+  ];
+
+  for (const opt of diffOptions) {
+    const isLocked = currentLevel < opt.minLevel;
+    const isSelected = (state.preferredDifficulty || 'normal') === opt.key;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `btn btn-sm ${isSelected ? 'btn-primary' : 'btn-secondary'}`;
+    btn.style.display = 'flex';
+    btn.style.flexDirection = 'column';
+    btn.style.alignItems = 'center';
+    btn.style.gap = '2px';
+    btn.style.padding = 'var(--space-2)';
+    btn.disabled = isLocked;
+
+    const mainText = document.createElement('span');
+    mainText.style.fontWeight = '600';
+    mainText.textContent = `${opt.label} (${opt.mult})`;
+
+    const subText = document.createElement('span');
+    subText.style.fontSize = '10px';
+    subText.style.opacity = '0.85';
+    subText.textContent = isLocked ? `🔒 Lv. ${opt.minLevel}` : opt.desc;
+
+    btn.append(mainText, subText);
+    btn.addEventListener('click', () => {
+      setPreferredDifficulty(opt.key);
+      setMapDifficulty(opt.key);
+    });
+
+    diffGrid.append(btn);
+  }
+
+  setupCard.append(horizonTitle, horizonGrid, diffTitle, diffGrid);
 
   const startBtn = document.createElement('button');
   startBtn.type = 'button';
@@ -1080,17 +1283,59 @@ function renderRoundContent(container, state) {
   practiceBtn.textContent = 'Coba Ronde Latihan';
   practiceBtn.addEventListener('click', startPracticeAction);
 
-  container.append(emptyBox, startBtn, practiceBtn);
+  container.append(emptyBox, setupCard, startBtn, practiceBtn);
 }
 
 function renderLeaderboardContent(container, state) {
+  const currentType = state.leaderboardType || 'total';
+
+  // Sub-tabs navigation (C5: Total, Rata-rata, Hari Ini)
+  const subTabNav = document.createElement('div');
+  subTabNav.style.display = 'flex';
+  subTabNav.style.gap = 'var(--space-1)';
+  subTabNav.style.marginBottom = 'var(--space-3)';
+  subTabNav.style.borderBottom = '1px solid var(--border)';
+  subTabNav.style.paddingBottom = 'var(--space-2)';
+
+  const tabs = [
+    { id: 'total', label: 'Total Skor' },
+    { id: 'average', label: 'Rata-rata (Min. 5)' },
+    { id: 'today', label: 'Hari Ini' },
+  ];
+
+  for (const t of tabs) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `btn btn-sm ${currentType === t.id ? 'btn-primary' : 'btn-ghost'}`;
+    btn.style.padding = '4px 10px';
+    btn.style.fontSize = 'var(--text-xs)';
+    btn.textContent = t.label;
+    btn.addEventListener('click', async () => {
+      setLeaderboardType(t.id);
+      try {
+        const data = await getLeaderboard(t.id);
+        setLeaderboardData(data);
+      } catch (err) {
+        console.warn('Gagal memuat papan peringkat:', err.message);
+      }
+    });
+    subTabNav.append(btn);
+  }
+  container.append(subTabNav);
+
   const rows = state.leaderboard;
 
   if (!rows || rows.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'state-box';
     const text = document.createElement('p');
-    text.textContent = 'Belum ada data pemain di papan peringkat.';
+    if (currentType === 'average') {
+      text.textContent = 'Belum ada pemain dengan minimal 5 ronde selesai.';
+    } else if (currentType === 'today') {
+      text.textContent = 'Belum ada ronde yang diselesaikan hari ini. Jadilah yang pertama!';
+    } else {
+      text.textContent = 'Belum ada data pemain di papan peringkat.';
+    }
     empty.append(text);
     container.append(empty);
     return;
@@ -1113,10 +1358,21 @@ function renderLeaderboardContent(container, state) {
   thName.textContent = 'Pemain';
 
   const thScore = document.createElement('th');
-  thScore.textContent = 'Skor';
+  if (currentType === 'average') {
+    thScore.textContent = 'Rata-rata';
+  } else if (currentType === 'today') {
+    thScore.textContent = 'Skor Hari Ini';
+  } else {
+    thScore.textContent = 'Total Skor';
+  }
   thScore.style.textAlign = 'right';
 
-  trHead.append(thRank, thName, thScore);
+  const thRounds = document.createElement('th');
+  thRounds.textContent = 'Ronde';
+  thRounds.style.textAlign = 'right';
+  thRounds.style.width = '55px';
+
+  trHead.append(thRank, thName, thScore, thRounds);
   thead.append(trHead);
   table.append(thead);
 
@@ -1125,8 +1381,10 @@ function renderLeaderboardContent(container, state) {
 
   for (const row of rows) {
     const tr = document.createElement('tr');
-    // Tandai baris milik pemain dengan border kiri beraksen
-    if (currentDisplayName && row.displayName.toLowerCase() === currentDisplayName.toLowerCase()) {
+    if (
+      currentDisplayName &&
+      row.displayName?.toLowerCase() === currentDisplayName?.toLowerCase()
+    ) {
       tr.className = 'current-player';
     }
 
@@ -1139,9 +1397,18 @@ function renderLeaderboardContent(container, state) {
 
     const tdScore = document.createElement('td');
     tdScore.className = 'col-score';
-    tdScore.textContent = String(row.totalScore);
+    if (currentType === 'average') {
+      tdScore.textContent = row.avgScore !== null ? `${row.avgScore} pt` : '-';
+    } else {
+      tdScore.textContent = String(row.totalScore);
+    }
 
-    tr.append(tdRank, tdName, tdScore);
+    const tdRounds = document.createElement('td');
+    tdRounds.style.textAlign = 'right';
+    tdRounds.style.color = 'var(--text-secondary)';
+    tdRounds.textContent = String(row.roundsDone ?? 0);
+
+    tr.append(tdRank, tdName, tdScore, tdRounds);
     tbody.append(tr);
   }
 
@@ -1383,12 +1650,24 @@ async function startNewRoundAction() {
     setPracticeMode(false);
     clearPracticeGuide();
     clearRoundResult();
-    const roundData = await startRound(state.token);
+
+    const horizon = state.preferredHorizon || 600;
+    const diff = state.preferredDifficulty || 'normal';
+    setMapDifficulty(diff);
+    setTrailHorizon(horizon);
+
+    const roundData = await startRound(state.token, {
+      horizon_seconds: horizon,
+      difficulty: diff,
+    });
     setActiveRound(roundData);
+    if (roundData.difficulty) setMapDifficulty(roundData.difficulty);
+    if (roundData.horizonSeconds) setTrailHorizon(roundData.horizonSeconds);
+
     fetchCurrentIssPosition()
       .then((pos) => updateIssPosition(pos))
       .catch(() => {});
-    fetchIssTrail()
+    fetchIssTrail(roundData.horizonSeconds || horizon)
       .then((trail) => updateIssTrail(trail))
       .catch(() => {});
   } catch (err) {
@@ -1416,7 +1695,7 @@ async function lockPracticeGuessAction() {
 
   try {
     const result = await submitPracticeGuess(coords, state.token);
-    showRoundResult(coords, { lat: result.answer.lat, lng: result.answer.lng });
+    showRoundResult(coords, { lat: result.answer.lat, lng: result.answer.lng }, 600);
     setPracticeResult(result);
     setRoundStatus('idle');
   } catch (err) {
@@ -1430,12 +1709,13 @@ async function lockGuessAction() {
 
   const roundId = state.activeRound.roundId;
   const coords = state.draftGuess;
+  const horizonSec = state.activeRound.horizonSeconds || 600;
 
   setRoundStatus('submitting');
 
   try {
     const result = await submitGuess(roundId, coords, state.token);
-    showRoundResult(coords, { lat: result.answer.lat, lng: result.answer.lng });
+    showRoundResult(coords, { lat: result.answer.lat, lng: result.answer.lng }, horizonSec);
     setRoundStatus('result', result);
     clearDraftGuess();
 
@@ -1445,8 +1725,8 @@ async function lockGuessAction() {
       setPlayerData(meData.player, meData.stats);
     });
 
-    // Refresh papan peringkat terbaru
-    getLeaderboard()
+    // Refresh papan peringkat terbaru sesuai tab yang aktif
+    getLeaderboard(state.leaderboardType || 'total')
       .then((data) => setLeaderboardData(data))
       .catch((err) => console.warn('Gagal memuat papan peringkat:', err.message));
   } catch (err) {

@@ -34,4 +34,11 @@ export class AppError extends Error {
   static badGateway(message, code = 'UPSTREAM_ERROR') {
     return new AppError(502, code, message);
   }
+
+  static tooManyRequests(
+    message = 'Terlalu banyak permintaan. Tunggu sebentar.',
+    code = 'TOO_MANY_REQUESTS',
+  ) {
+    return new AppError(429, code, message);
+  }
 }

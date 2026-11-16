@@ -1,23 +1,35 @@
 import { Router } from 'express';
 import { getSupabaseAdmin } from '../lib/supabase.js';
+import { validateLeaderboardType } from '../validators.js';
 
 const router = Router();
 
 const LEADERBOARD_CACHE_HEADER = 'public, s-maxage=10, stale-while-revalidate=30';
 
 /**
- * GET /api/leaderboard
- * Mengambil 20 pemain teratas berdasarkan total skor dari view leaderboard.
+ * GET /api/leaderboard?type=total|average|today
+ * Mengambil 20 pemain teratas berdasarkan tipe papan peringkat.
  * Dapat diakses tanpa login.
  */
-export async function leaderboardHandler(_req, res, next) {
+export async function leaderboardHandler(req, res, next) {
   try {
+    const type = validateLeaderboardType(req.query?.type);
     const supabase = getSupabaseAdmin();
 
+    let viewName = 'leaderboard';
+    let orderColumn = 'total_score';
+    if (type === 'average') {
+      viewName = 'leaderboard_average';
+      orderColumn = 'avg_score';
+    } else if (type === 'today') {
+      viewName = 'leaderboard_today';
+      orderColumn = 'total_score';
+    }
+
     const { data, error } = await supabase
-      .from('leaderboard')
-      .select('display_name, total_score, rounds_done, best_distance_km')
-      .order('total_score', { ascending: false })
+      .from(viewName)
+      .select('*')
+      .order(orderColumn, { ascending: false })
       .limit(20);
 
     if (error) throw error;
@@ -27,6 +39,10 @@ export async function leaderboardHandler(_req, res, next) {
       displayName: row.display_name,
       totalScore: Number(row.total_score || 0),
       roundsDone: Number(row.rounds_done || 0),
+      avgScore:
+        row.avg_score !== null && row.avg_score !== undefined
+          ? Number(Number(row.avg_score).toFixed(1))
+          : null,
       bestDistanceKm:
         row.best_distance_km !== null && row.best_distance_km !== undefined
           ? Number(row.best_distance_km)

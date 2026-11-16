@@ -71,9 +71,10 @@ export const getActiveRound = (token) =>
     token,
   });
 
-export const startRound = (token) =>
+export const startRound = (token, { horizon_seconds = 600, difficulty = 'normal' } = {}) =>
   apiRequest('/api/rounds', {
     method: 'POST',
+    body: { horizon_seconds, difficulty },
     token,
   });
 
@@ -93,4 +94,5 @@ export const submitPracticeGuess = ({ lat, lng }, token) =>
   });
 
 // Leaderboard global (top 20)
-export const getLeaderboard = () => apiRequest('/api/leaderboard');
+export const getLeaderboard = (type = 'total') =>
+  apiRequest(`/api/leaderboard?type=${encodeURIComponent(type)}`);

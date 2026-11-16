@@ -16,6 +16,28 @@ let issMarker = null;
 let issTrailLayer = null;
 let practiceLayer = null;
 let isPracticeGuideActive = false;
+let currentDifficulty = 'normal';
+
+export function setMapDifficulty(diff) {
+  currentDifficulty = diff || 'normal';
+  if (currentDifficulty === 'expert') {
+    if (issTrailLayer) issTrailLayer.clearLayers();
+    if (!isPracticeGuideActive && practiceLayer) practiceLayer.clearLayers();
+  } else {
+    if (lastTrailPoints.length > 0) {
+      renderTrailLines(lastTrailPoints);
+    }
+    if (currentDifficulty === 'easy' || isPracticeGuideActive) {
+      if (latestIssPos) renderPracticeProjection(latestIssPos, lastKnownBearing);
+    } else if (practiceLayer) {
+      practiceLayer.clearLayers();
+    }
+  }
+
+  if (issMarker && latestIssPos) {
+    issMarker.setIcon(createIssIcon(lastKnownBearing, currentDifficulty !== 'expert'));
+  }
+}
 let guessMarker = null;
 let answerMarker = null;
 let connectionLine = null;
@@ -122,8 +144,15 @@ export function normalizeLng(lng) {
  * Membuat custom DivIcon SVG untuk penanda ISS dengan indikator panah arah orbit.
  *
  * @param {number} bearing
+ * @param {boolean} [showBearing=true]
  */
-function createIssIcon(bearing = 0) {
+function createIssIcon(bearing = 0, showBearing = true) {
+  const bearingArrowHtml = showBearing
+    ? `<div style="position:absolute;width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;transform:rotate(${bearing}deg);pointer-events:none;">
+          <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:8px solid var(--accent);transform:translateY(-5px);"></div>
+        </div>`
+    : '';
+
   return window.L.divIcon({
     className: 'iss-custom-marker',
     html: `
@@ -136,9 +165,7 @@ function createIssIcon(bearing = 0) {
           <line x1="1" y1="16" x2="5" y2="16" stroke="currentColor" stroke-width="1.5"/>
           <line x1="27" y1="16" x2="31" y2="16" stroke="currentColor" stroke-width="1.5"/>
         </svg>
-        <div style="position:absolute;width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;transform:rotate(${bearing}deg);pointer-events:none;">
-          <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:8px solid var(--accent);transform:translateY(-5px);"></div>
-        </div>
+        ${bearingArrowHtml}
       </div>
     `,
     iconSize: [32, 32],
@@ -257,7 +284,7 @@ export function updateIssPosition(pos) {
 
   if (!issMarker) {
     issMarker = window.L.marker(latlng, {
-      icon: createIssIcon(lastKnownBearing),
+      icon: createIssIcon(lastKnownBearing, currentDifficulty !== 'expert'),
       zIndexOffset: 1000,
     }).addTo(mapInstance);
     issMarker.bindTooltip('ISS (Sedang Mengorbit)', {
@@ -267,16 +294,16 @@ export function updateIssPosition(pos) {
     });
   } else {
     issMarker.setLatLng(latlng);
-    issMarker.setIcon(createIssIcon(lastKnownBearing));
+    issMarker.setIcon(createIssIcon(lastKnownBearing, currentDifficulty !== 'expert'));
   }
 
   // Otomatis sambungkan ujung terdepan jejak ke posisi baru ISS
-  if (lastTrailPoints.length > 0) {
+  if (lastTrailPoints.length > 0 && currentDifficulty !== 'expert') {
     renderTrailLines(lastTrailPoints);
   }
 
-  // Perbarui garis perkiraan arah latihan jika sedang aktif
-  if (isPracticeGuideActive) {
+  // Perbarui garis perkiraan arah jika mode latihan atau mudah sedang aktif
+  if (isPracticeGuideActive || currentDifficulty === 'easy') {
     renderPracticeProjection(pos, lastKnownBearing);
   }
 }
@@ -299,6 +326,7 @@ function renderTrailLines(trailPoints) {
 
   issTrailLayer.clearLayers();
 
+  if (currentDifficulty === 'expert') return;
   if (!trailPoints || trailPoints.length === 0) return;
 
   // Sambungkan titik historis dengan posisi live ISS saat ini di ujungnya
@@ -356,11 +384,13 @@ export function setGuessMarker(coords) {
 /**
  * Menampilkan hasil ronde: penanda jawaban dan garis putus-putus ke tebakan,
  * lalu menyesuaikan batas pandang peta (fitBounds) secara fungsional.
+ * Menghormati prefers-reduced-motion untuk animasi garis.
  *
  * @param {{ lat: number, lng: number }} guessCoords
  * @param {{ lat: number, lng: number }} answerCoords
+ * @param {number} [horizonSeconds=600]
  */
-export function showRoundResult(guessCoords, answerCoords) {
+export function showRoundResult(guessCoords, answerCoords, horizonSeconds = 600) {
   if (!mapInstance) return;
 
   // Sesuaikan longitude visual jawaban agar berada pada kelipatan dunia terdekat dengan tebakan pemain.
@@ -389,7 +419,8 @@ export function showRoundResult(guessCoords, answerCoords) {
     answerMarker.setLatLng([visualAnswer.lat, visualAnswer.lng]);
   }
 
-  answerMarker.bindTooltip('Posisi Sebenarnya (+10 Menit)', {
+  const minutes = Math.round(Number(horizonSeconds || 600) / 60);
+  answerMarker.bindTooltip(`Posisi Sebenarnya (+${minutes} Menit)`, {
     permanent: true,
     direction: 'bottom',
     offset: [0, 12],
@@ -401,18 +432,58 @@ export function showRoundResult(guessCoords, answerCoords) {
     mapInstance.removeLayer(connectionLine);
   }
 
-  connectionLine = window.L.polyline(
-    [
-      [guessCoords.lat, guessCoords.lng],
-      [visualAnswer.lat, visualAnswer.lng],
-    ],
-    {
-      color: 'var(--accent)',
-      weight: 2.5,
-      dashArray: '5, 8',
-      opacity: 0.95,
-    },
-  ).addTo(mapInstance);
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (prefersReducedMotion) {
+    connectionLine = window.L.polyline(
+      [
+        [guessCoords.lat, guessCoords.lng],
+        [visualAnswer.lat, visualAnswer.lng],
+      ],
+      {
+        color: 'var(--accent)',
+        weight: 2.5,
+        dashArray: '5, 8',
+        opacity: 0.95,
+      },
+    ).addTo(mapInstance);
+  } else {
+    // Reveal animasi garis tumbuh dari tebakan menuju jawaban
+    const duration = 600;
+    const startTime = performance.now();
+
+    connectionLine = window.L.polyline(
+      [
+        [guessCoords.lat, guessCoords.lng],
+        [guessCoords.lat, guessCoords.lng],
+      ],
+      {
+        color: 'var(--accent)',
+        weight: 2.5,
+        dashArray: '5, 8',
+        opacity: 0.95,
+      },
+    ).addTo(mapInstance);
+
+    const step = (now) => {
+      const progress = Math.min(1, (now - startTime) / duration);
+      const currentLat = guessCoords.lat + (visualAnswer.lat - guessCoords.lat) * progress;
+      const currentLng = guessCoords.lng + (visualAnswer.lng - guessCoords.lng) * progress;
+      if (connectionLine) {
+        connectionLine.setLatLngs([
+          [guessCoords.lat, guessCoords.lng],
+          [currentLat, currentLng],
+        ]);
+      }
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      }
+    };
+    requestAnimationFrame(step);
+  }
 
   // Sesuaikan batas pandang peta agar kedua titik terlihat nyaman berdampingan
   const bounds = window.L.latLngBounds(

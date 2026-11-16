@@ -12,9 +12,14 @@ let usingProxy = false;
 let pollingTimer = null;
 let onPositionUpdateCallback = null;
 let onTrailUpdateCallback = null;
+let currentTrailHorizon = 600;
 
 export function setOnTrailUpdate(callback) {
   onTrailUpdateCallback = callback;
+}
+
+export function setTrailHorizon(horizon) {
+  currentTrailHorizon = Number(horizon) || 600;
 }
 
 export async function fetchCurrentIssPosition() {
@@ -50,13 +55,15 @@ export async function fetchCurrentIssPosition() {
   };
 }
 
-export async function fetchIssTrail() {
+export async function fetchIssTrail(horizonSeconds = currentTrailHorizon) {
+  const horizon = Number(horizonSeconds) || 600;
+  const intervalSeconds = Math.max(1, Math.floor(horizon / 10));
   if (!usingProxy) {
     try {
       const nowTs = Math.floor(Date.now() / 1000);
       const timestamps = [];
       for (let i = 9; i >= 0; i--) {
-        timestamps.push(nowTs - i * 60);
+        timestamps.push(nowTs - i * intervalSeconds);
       }
       const res = await fetch(`${WHERETHEISS_BASE}/positions?timestamps=${timestamps.join(',')}`, {
         signal: AbortSignal.timeout(5000),
@@ -74,7 +81,7 @@ export async function fetchIssTrail() {
   }
 
   // Fallback ke server proxy
-  const res = await fetch('/api/iss/trail');
+  const res = await fetch(`/api/iss/trail?horizon=${horizon}`);
   if (!res.ok) throw new Error('Proxy ISS jejak gagal.');
   const payload = await res.json();
   return payload.data.map((p) => ({

@@ -1,4 +1,10 @@
 import { AppError } from './lib/errors.js';
+import {
+  ALLOWED_HORIZONS_SECONDS,
+  DEFAULT_HORIZON_SECONDS,
+  ALLOWED_DIFFICULTIES,
+  DEFAULT_DIFFICULTY,
+} from './domain/gameLogic.js';
 
 const MIN_DISPLAY_NAME_LENGTH = 3;
 const MAX_DISPLAY_NAME_LENGTH = 20;
@@ -110,4 +116,65 @@ export function usernameToEmail(username) {
     .toLowerCase();
   const escaped = clean.replace(/[^a-z0-9]/g, (ch) => `_${ch.charCodeAt(0).toString(16)}`);
   return `${escaped}@isshunter.app`;
+}
+
+/**
+ * Validasi horizon waktu per ronde (detik).
+ *
+ * @param {unknown} val
+ * @returns {number}
+ */
+export function validateHorizonSeconds(val) {
+  if (val === undefined || val === null || val === '') {
+    return DEFAULT_HORIZON_SECONDS;
+  }
+  const num = Number(val);
+  if (!Number.isInteger(num) || !ALLOWED_HORIZONS_SECONDS.includes(num)) {
+    throw AppError.badRequest(
+      `Horizon waktu tidak valid. Pilihan yang diizinkan: ${ALLOWED_HORIZONS_SECONDS.join(', ')} detik.`,
+      'INVALID_HORIZON',
+    );
+  }
+  return num;
+}
+
+/**
+ * Validasi tingkat kesulitan ronde.
+ *
+ * @param {unknown} val
+ * @returns {'easy' | 'normal' | 'hard' | 'expert'}
+ */
+export function validateDifficulty(val) {
+  if (val === undefined || val === null || val === '') {
+    return DEFAULT_DIFFICULTY;
+  }
+  const str = String(val).trim().toLowerCase();
+  if (!ALLOWED_DIFFICULTIES.includes(str)) {
+    throw AppError.badRequest(
+      `Tingkat kesulitan tidak valid. Pilihan yang diizinkan: ${ALLOWED_DIFFICULTIES.join(', ')}.`,
+      'INVALID_DIFFICULTY',
+    );
+  }
+  return str;
+}
+
+/**
+ * Validasi jenis papan peringkat (total, average, today).
+ *
+ * @param {unknown} val
+ * @returns {'total' | 'average' | 'today'}
+ */
+export function validateLeaderboardType(val) {
+  if (val === undefined || val === null || val === '') {
+    return 'total';
+  }
+  const str = String(val).trim().toLowerCase();
+  const allowed = ['total', 'average', 'today'];
+  if (!allowed.includes(str)) {
+    throw AppError.badRequest(
+      `Jenis papan peringkat tidak valid. Pilihan: ${allowed.join(', ')}.`,
+      'INVALID_LEADERBOARD_TYPE',
+    );
+  }
+  return str;
 }
