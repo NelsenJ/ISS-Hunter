@@ -354,6 +354,7 @@ test('GET /api/me mengembalikan profil, level, progress, dan status badges denga
   // Skor 4500: level floor(4500/2000) + 1 = 3, progress 4500 % 2000 = 500
   assert.equal(res.body.data.stats.level, 3);
   assert.equal(res.body.data.stats.progress, 500);
+  assert.equal(res.body.data.stats.progressMax, 2000);
   assert.equal(res.body.data.stats.totalScore, 4500);
 
   // Badges: rounds_done 5 (pemula = true), best_distance_km 85.4 (< 500: navigator, < 100: sniper)

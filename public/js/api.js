@@ -65,6 +65,12 @@ export const getMe = (token) =>
   });
 
 // Ronde permainan
+export const getActiveRound = (token) =>
+  apiRequest('/api/rounds/active', {
+    method: 'GET',
+    token,
+  });
+
 export const startRound = (token) =>
   apiRequest('/api/rounds', {
     method: 'POST',

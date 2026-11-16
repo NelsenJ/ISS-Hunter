@@ -3,7 +3,7 @@
  */
 
 import { initTheme, toggleTheme } from './theme.js';
-import { getConfig, getHealth, getMe } from './api.js';
+import { getConfig, getHealth, getMe, getActiveRound } from './api.js';
 import { initAuth, onAuthStateChange, getSession } from './auth.js';
 import {
   subscribe,
@@ -12,8 +12,13 @@ import {
   setPlayerData,
   setProfileRequired,
   loadProfileCache,
+  setActiveRound,
+  loadSavedDraftGuess,
+  setDraftGuess,
+  clearDraftGuess,
   resetStore,
 } from './store.js';
+import { setGuessMarker } from './map.js';
 import { initUI, render } from './ui.js';
 
 const appContainer = document.getElementById('app-container');
@@ -79,13 +84,31 @@ async function start() {
       return;
     }
 
-    // Pantau perubahan sesi autentikasi
-    onAuthStateChange(async (_event, session) => {
+    async function syncUserSession(session) {
       if (session?.user && session?.access_token) {
         setAuthSession(session.user, session.access_token);
         try {
           const meData = await getMe(session.access_token);
           setPlayerData(meData.player, meData.stats);
+
+          // Pulihkan ronde aktif dari server sebagai sumber kebenaran
+          try {
+            const activeRound = await getActiveRound(session.access_token);
+            if (activeRound) {
+              setActiveRound(activeRound);
+              const savedDraft = loadSavedDraftGuess();
+              if (savedDraft) {
+                setDraftGuess(savedDraft);
+                setGuessMarker(savedDraft);
+              }
+            } else {
+              setActiveRound(null);
+              clearDraftGuess();
+              setGuessMarker(null);
+            }
+          } catch (roundErr) {
+            console.warn('Gagal memulihkan status ronde aktif:', roundErr.message);
+          }
         } catch (err) {
           if (err.code === 'PROFILE_REQUIRED' || err.status === 404) {
             setProfileRequired(true);
@@ -96,23 +119,16 @@ async function start() {
       } else {
         resetStore();
       }
+    }
+
+    // Pantau perubahan sesi autentikasi
+    onAuthStateChange(async (_event, session) => {
+      await syncUserSession(session);
     });
 
     // Cek apakah sudah ada sesi aktif yang tersimpan
     const initialSession = await getSession();
-    if (initialSession?.access_token) {
-      setAuthSession(initialSession.user, initialSession.access_token);
-      try {
-        const meData = await getMe(initialSession.access_token);
-        setPlayerData(meData.player, meData.stats);
-      } catch (err) {
-        if (err.code === 'PROFILE_REQUIRED' || err.status === 404) {
-          setProfileRequired(true);
-        }
-      }
-    } else {
-      resetStore();
-    }
+    await syncUserSession(initialSession);
   } catch (err) {
     console.error('Gagal membaca konfigurasi klien:', err);
   }

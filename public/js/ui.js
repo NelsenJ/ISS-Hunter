@@ -99,7 +99,8 @@ function renderHeader(state) {
   if (state.player) {
     const level = state.stats?.level ?? 1;
     const progress = state.stats?.progress ?? 0;
-    const progressPercent = Math.min(100, Math.max(0, (progress / 2000) * 100));
+    const progressMax = state.stats?.progressMax || 2000;
+    const progressPercent = Math.min(100, Math.max(0, (progress / progressMax) * 100));
 
     const nameEl = document.createElement('span');
     nameEl.className = 'player-name';
@@ -118,6 +119,7 @@ function renderHeader(state) {
     tutorialBtn.textContent = 'Panduan';
     tutorialBtn.addEventListener('click', () => {
       activeTab = 'tutorial';
+      bottomSheetExpanded = true;
       render(state);
     });
 
@@ -467,10 +469,13 @@ function renderGameScreen(state) {
       .then((trail) => updateIssTrail(trail))
       .catch((err) => console.warn('Gagal memuat jejak:', err.message));
 
-    const savedDraft = loadSavedDraftGuess();
-    if (savedDraft) {
+    const savedDraft = state.draftGuess || loadSavedDraftGuess();
+    if (state.roundStatus === 'active' && savedDraft) {
       setDraftGuess(savedDraft);
       setGuessMarker(savedDraft);
+    } else if (state.roundStatus !== 'active') {
+      clearDraftGuess();
+      setGuessMarker(null);
     }
 
     mapInitialized = true;
@@ -486,8 +491,91 @@ function renderGameScreen(state) {
       .catch((err) => console.warn('Gagal memuat papan peringkat:', err.message));
   }
 
+  renderMapLegend(viewport);
   renderDesktopPanel(viewport, state);
   renderBottomSheet(viewport, state);
+}
+
+function createTabNavigation(currentTab, onSelect) {
+  const tabHeader = document.createElement('div');
+  tabHeader.className = 'tabs';
+  tabHeader.style.padding = '0 var(--space-2)';
+
+  const tabs = [
+    { id: 'round', label: 'Permainan' },
+    { id: 'leaderboard', label: 'Peringkat' },
+    { id: 'stats', label: 'Profil' },
+    { id: 'tutorial', label: 'Panduan' },
+  ];
+
+  for (const t of tabs) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tab-btn';
+    btn.setAttribute('aria-selected', currentTab === t.id ? 'true' : 'false');
+    btn.textContent = t.label;
+    btn.addEventListener('click', () => {
+      onSelect(t.id);
+    });
+    tabHeader.append(btn);
+  }
+
+  return tabHeader;
+}
+
+function renderTabPanelContent(container, tabName, state) {
+  if (tabName === 'round') {
+    renderRoundContent(container, state);
+  } else if (tabName === 'leaderboard') {
+    renderLeaderboardContent(container, state);
+  } else if (tabName === 'stats') {
+    renderStatsContent(container, state);
+  } else {
+    renderTutorialContent(container, state);
+  }
+}
+
+function renderMapLegend(viewport) {
+  let legend = document.getElementById('map-legend');
+  if (!legend) {
+    legend = document.createElement('div');
+    legend.id = 'map-legend';
+    legend.className = 'map-legend';
+    viewport.append(legend);
+  }
+
+  legend.replaceChildren();
+
+  const title = document.createElement('div');
+  title.className = 'legend-title';
+  title.textContent = 'Legenda Peta';
+
+  const items = [
+    { type: 'iss', label: 'ISS (Live)' },
+    { type: 'trail', label: 'Jejak Orbit' },
+    { type: 'guess', label: 'Tebakanmu' },
+    { type: 'answer', label: 'Posisi Sebenarnya' },
+  ];
+
+  const list = document.createElement('div');
+  list.className = 'legend-list';
+
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'legend-item';
+
+    const icon = document.createElement('span');
+    icon.className = `legend-icon legend-icon-${item.type}`;
+
+    const label = document.createElement('span');
+    label.className = 'legend-label';
+    label.textContent = item.label;
+
+    row.append(icon, label);
+    list.append(row);
+  }
+
+  legend.append(title, list);
 }
 
 function renderDesktopPanel(viewport, state) {
@@ -501,65 +589,14 @@ function renderDesktopPanel(viewport, state) {
 
   panel.replaceChildren();
 
-  // Tab Header: Permainan, Peringkat, Profil
-  const tabHeader = document.createElement('div');
-  tabHeader.className = 'tabs';
-  tabHeader.style.padding = '0 var(--space-2)';
-
-  const roundTabBtn = document.createElement('button');
-  roundTabBtn.type = 'button';
-  roundTabBtn.className = 'tab-btn';
-  roundTabBtn.setAttribute('aria-selected', activeTab === 'round' ? 'true' : 'false');
-  roundTabBtn.textContent = 'Permainan';
-  roundTabBtn.addEventListener('click', () => {
-    activeTab = 'round';
+  const tabHeader = createTabNavigation(activeTab, (newTab) => {
+    activeTab = newTab;
     render(state);
   });
-
-  const lbTabBtn = document.createElement('button');
-  lbTabBtn.type = 'button';
-  lbTabBtn.className = 'tab-btn';
-  lbTabBtn.setAttribute('aria-selected', activeTab === 'leaderboard' ? 'true' : 'false');
-  lbTabBtn.textContent = 'Peringkat';
-  lbTabBtn.addEventListener('click', () => {
-    activeTab = 'leaderboard';
-    render(state);
-  });
-
-  const statsTabBtn = document.createElement('button');
-  statsTabBtn.type = 'button';
-  statsTabBtn.className = 'tab-btn';
-  statsTabBtn.setAttribute('aria-selected', activeTab === 'stats' ? 'true' : 'false');
-  statsTabBtn.textContent = 'Profil';
-  statsTabBtn.addEventListener('click', () => {
-    activeTab = 'stats';
-    render(state);
-  });
-
-  const tutorialTabBtn = document.createElement('button');
-  tutorialTabBtn.type = 'button';
-  tutorialTabBtn.className = 'tab-btn';
-  tutorialTabBtn.setAttribute('aria-selected', activeTab === 'tutorial' ? 'true' : 'false');
-  tutorialTabBtn.textContent = 'Panduan';
-  tutorialTabBtn.addEventListener('click', () => {
-    activeTab = 'tutorial';
-    render(state);
-  });
-
-  tabHeader.append(roundTabBtn, lbTabBtn, statsTabBtn, tutorialTabBtn);
 
   const panelBody = document.createElement('div');
   panelBody.className = 'side-panel-body';
-
-  if (activeTab === 'round') {
-    renderRoundContent(panelBody, state);
-  } else if (activeTab === 'leaderboard') {
-    renderLeaderboardContent(panelBody, state);
-  } else if (activeTab === 'stats') {
-    renderStatsContent(panelBody, state);
-  } else {
-    renderTutorialContent(panelBody, state);
-  }
+  renderTabPanelContent(panelBody, activeTab, state);
 
   panel.append(tabHeader, panelBody);
 }
@@ -587,19 +624,34 @@ function renderBottomSheet(viewport, state) {
   title.style.fontSize = 'var(--text-sm)';
   title.style.fontWeight = '600';
 
-  if (state.roundStatus === 'active') {
-    title.textContent = 'Ronde Berjalan';
-  } else if (state.roundStatus === 'result') {
-    title.textContent = 'Hasil Ronde';
-  } else {
-    title.textContent = 'ISS Hunter';
-  }
-
   const subtitle = document.createElement('span');
   subtitle.style.fontSize = 'var(--text-xs)';
   subtitle.style.color = 'var(--text-secondary)';
-  subtitle.textContent =
-    state.roundStatus === 'active' ? 'Klik peta lalu kunci tebakan' : 'Tekan untuk detail';
+
+  if (activeTab === 'round') {
+    if (state.roundStatus === 'active') {
+      title.textContent = 'Ronde Berjalan';
+      subtitle.textContent = 'Klik peta lalu kunci tebakan';
+    } else if (state.roundStatus === 'result') {
+      title.textContent = 'Hasil Ronde';
+      subtitle.textContent = 'Lihat perolehan skor dan jarak';
+    } else if (state.roundStatus === 'submitting') {
+      title.textContent = 'Menghitung Skor';
+      subtitle.textContent = 'Memproses tebakan di server…';
+    } else {
+      title.textContent = 'ISS Hunter';
+      subtitle.textContent = 'Mulai ronde untuk menebak posisi ISS';
+    }
+  } else if (activeTab === 'leaderboard') {
+    title.textContent = 'Papan Peringkat';
+    subtitle.textContent = 'Pemain dengan skor tertinggi';
+  } else if (activeTab === 'stats') {
+    title.textContent = 'Profil Pemain';
+    subtitle.textContent = `${state.player?.displayName || 'Pemain'} • Statistik & Lencana`;
+  } else {
+    title.textContent = 'Panduan Permainan';
+    subtitle.textContent = 'Cara membaca peta & fakta orbit ISS';
+  }
 
   titleWrap.append(title, subtitle);
 
@@ -615,11 +667,18 @@ function renderBottomSheet(viewport, state) {
 
   sheetHeader.append(titleWrap, toggleBtn);
 
+  // Tab Header untuk navigasi mobile
+  const tabHeader = createTabNavigation(activeTab, (newTab) => {
+    activeTab = newTab;
+    bottomSheetExpanded = true;
+    render(state);
+  });
+
   const sheetBody = document.createElement('div');
   sheetBody.className = 'bottom-sheet-body';
-  renderRoundContent(sheetBody, state);
+  renderTabPanelContent(sheetBody, activeTab, state);
 
-  sheet.append(sheetHeader, sheetBody);
+  sheet.append(sheetHeader, tabHeader, sheetBody);
 }
 
 function renderRoundContent(container, state) {
@@ -727,11 +786,12 @@ function renderRoundContent(container, state) {
     countdownWrap.style.display = 'flex';
     countdownWrap.style.justifyContent = 'space-between';
     countdownWrap.style.alignItems = 'baseline';
-    countdownWrap.style.marginBottom = 'var(--space-3)';
+    countdownWrap.style.gap = 'var(--space-2)';
+    countdownWrap.style.marginBottom = 'var(--space-1)';
 
     const timeLabel = document.createElement('span');
     timeLabel.className = 'stat-label';
-    timeLabel.textContent = 'Batas Kunci';
+    timeLabel.textContent = 'Sisa waktu untuk mengunci tebakan';
 
     const timeValue = document.createElement('span');
     timeValue.className = 'stat-value tabular';
@@ -739,6 +799,15 @@ function renderRoundContent(container, state) {
     timeValue.textContent = formatRemainingTime(state.activeRound.startedAt);
 
     countdownWrap.append(timeLabel, timeValue);
+
+    const timerNote = document.createElement('p');
+    timerNote.className = 'form-hint';
+    timerNote.style.marginBottom = 'var(--space-3)';
+    timerNote.style.lineHeight = '1.4';
+    timerNote.textContent =
+      'Hasil dan skor langsung dihitung seketika setelah kamu mengunci tebakan.';
+
+    roundBox.append(countdownWrap, timerNote);
 
     if (countdownTimer) clearInterval(countdownTimer);
     countdownTimer = setInterval(() => {
@@ -1023,13 +1092,13 @@ function renderTutorialContent(container, state) {
     },
     {
       num: '2',
-      title: 'Garis Jejak Oranye',
-      desc: 'Menunjukkan jalur yang telah dilalui ISS selama 10 menit ke belakang. Perhatikan lengkungan gelombang kurvanya.',
+      title: 'Garis Jejak Orbit',
+      desc: 'Garis berwarna aksen menunjukkan jalur yang telah dilalui ISS selama 10 menit ke belakang. Perhatikan lengkungan gelombang kurvanya.',
     },
     {
       num: '3',
       title: 'Tebak Jalur Masa Depan',
-      desc: 'Klik di peta pada titik yang kamu perkirakan akan dilewati ISS 10 menit ke depan (ditandai titik hitam).',
+      desc: 'Klik di peta pada titik yang kamu perkirakan akan dilewati ISS 10 menit ke depan (ditandai dengan pin tebakanmu).',
     },
     {
       num: '4',

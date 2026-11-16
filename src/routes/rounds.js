@@ -231,7 +231,7 @@ export async function submitGuessHandler(req, res, next) {
 
     const badgesAfter = computeBadges(newRoundsDone, newBestDist);
     const newBadges = determineNewBadges(badgesBefore, badgesAfter);
-    const { level, progress } = calculateLevelAndProgress(newTotalScore);
+    const { level, progress, progressMax } = calculateLevelAndProgress(newTotalScore);
 
     return res.json({
       ok: true,
@@ -242,6 +242,7 @@ export async function submitGuessHandler(req, res, next) {
         totalScore: newTotalScore,
         level,
         progress,
+        progressMax,
         newBadges,
       },
     });
@@ -250,6 +251,54 @@ export async function submitGuessHandler(req, res, next) {
   }
 }
 
+/**
+ * GET /api/rounds/active
+ * Mengembalikan ronde terbuka (status = 'open') milik pemain jika masih berlaku (< 5 menit).
+ * Jika tidak ada atau sudah kedaluwarsa, mengembalikan data: null (dan menandai status 'expired').
+ */
+export async function getActiveRoundHandler(req, res, next) {
+  try {
+    const supabase = getSupabaseAdmin();
+
+    const { data: openRounds, error: fetchErr } = await supabase
+      .from('rounds')
+      .select('id, target_ts, created_at, status')
+      .eq('player_id', req.playerId)
+      .eq('status', 'open');
+
+    if (fetchErr) throw fetchErr;
+
+    if (!openRounds || openRounds.length === 0) {
+      return res.json({ ok: true, data: null });
+    }
+
+    const activeRound = openRounds[0];
+    const ageMs = Date.now() - new Date(activeRound.created_at).getTime();
+
+    if (ageMs > ROUND_EXPIRY_MS) {
+      await supabase
+        .from('rounds')
+        .update({ status: 'expired' })
+        .eq('id', activeRound.id)
+        .eq('player_id', req.playerId);
+
+      return res.json({ ok: true, data: null });
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        roundId: activeRound.id,
+        targetTs: activeRound.target_ts,
+        startedAt: activeRound.created_at,
+      },
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+router.get('/active', requireAuth, getActiveRoundHandler);
 router.post('/', requireAuth, createRoundHandler);
 router.post('/:id/guess', requireAuth, submitGuessHandler);
 

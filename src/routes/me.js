@@ -2,12 +2,9 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { getSupabaseAdmin } from '../lib/supabase.js';
 import { AppError } from '../lib/errors.js';
+import { calculateLevelAndProgress, computeBadges } from '../domain/gameLogic.js';
 
 const router = Router();
-
-const POINTS_PER_LEVEL = 2000;
-const NAVIGATOR_MAX_DISTANCE_KM = 500;
-const SNIPER_MAX_DISTANCE_KM = 100;
 
 /**
  * GET /api/me
@@ -49,14 +46,8 @@ export async function getMeHandler(req, res, next) {
         ? Number(statsData.best_distance_km)
         : null;
 
-    const level = Math.floor(totalScore / POINTS_PER_LEVEL) + 1;
-    const progress = totalScore % POINTS_PER_LEVEL;
-
-    const badges = {
-      pemula: roundsDone >= 1,
-      navigator: bestDistanceKm !== null && bestDistanceKm < NAVIGATOR_MAX_DISTANCE_KM,
-      sniper: bestDistanceKm !== null && bestDistanceKm < SNIPER_MAX_DISTANCE_KM,
-    };
+    const { level, progress, progressMax } = calculateLevelAndProgress(totalScore);
+    const badges = computeBadges(roundsDone, bestDistanceKm);
 
     return res.json({
       ok: true,
@@ -72,6 +63,7 @@ export async function getMeHandler(req, res, next) {
           bestDistanceKm,
           level,
           progress,
+          progressMax,
           badges,
         },
       },

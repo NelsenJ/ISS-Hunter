@@ -7,7 +7,7 @@ import {
   setIssFetchFn,
 } from '../src/lib/issApi.js';
 import { issNowHandler, issTrailHandler } from '../src/routes/iss.js';
-import { createRoundHandler } from '../src/routes/rounds.js';
+import { createRoundHandler, getActiveRoundHandler } from '../src/routes/rounds.js';
 import { setSupabaseClient } from '../src/lib/supabase.js';
 
 function createMockResponse() {
@@ -455,4 +455,137 @@ test('POST /api/rounds menangkap error 23505 race condition dan mengembalikan ro
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.ok, true);
   assert.equal(res.body.data.roundId, 77);
+});
+
+test('GET /api/rounds/active mengembalikan data: null jika tidak ada ronde terbuka', async () => {
+  const mockSupabase = {
+    from(table) {
+      assert.equal(table, 'rounds');
+      return {
+        select() {
+          return {
+            eq() {
+              return {
+                eq() {
+                  return Promise.resolve({ data: [], error: null });
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  setSupabaseClient(mockSupabase);
+
+  const req = { playerId: 'usr-empty' };
+  const res = createMockResponse();
+
+  await getActiveRoundHandler(req, res, () => {});
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.data, null);
+});
+
+test('GET /api/rounds/active mengembalikan ronde terbuka jika masih dalam batas 5 menit', async () => {
+  const recentStartedAt = new Date(Date.now() - 60 * 1000).toISOString(); // 1 menit lalu
+  const mockSupabase = {
+    from(table) {
+      assert.equal(table, 'rounds');
+      return {
+        select() {
+          return {
+            eq() {
+              return {
+                eq() {
+                  return Promise.resolve({
+                    data: [
+                      {
+                        id: 99,
+                        target_ts: 1700000600,
+                        created_at: recentStartedAt,
+                        status: 'open',
+                      },
+                    ],
+                    error: null,
+                  });
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  setSupabaseClient(mockSupabase);
+
+  const req = { playerId: 'usr-active' };
+  const res = createMockResponse();
+
+  await getActiveRoundHandler(req, res, () => {});
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ok, true);
+  assert.deepEqual(res.body.data, {
+    roundId: 99,
+    targetTs: 1700000600,
+    startedAt: recentStartedAt,
+  });
+});
+
+test('GET /api/rounds/active menandai expired dan mengembalikan data: null jika ronde terbuka > 5 menit', async () => {
+  const expiredStartedAt = new Date(Date.now() - 6 * 60 * 1000).toISOString(); // 6 menit lalu
+  let updatedStatus = null;
+  const mockSupabase = {
+    from(table) {
+      assert.equal(table, 'rounds');
+      return {
+        select() {
+          return {
+            eq() {
+              return {
+                eq() {
+                  return Promise.resolve({
+                    data: [
+                      {
+                        id: 101,
+                        target_ts: 1700000000,
+                        created_at: expiredStartedAt,
+                        status: 'open',
+                      },
+                    ],
+                    error: null,
+                  });
+                },
+              };
+            },
+          };
+        },
+        update(payload) {
+          updatedStatus = payload.status;
+          return {
+            eq() {
+              return {
+                eq() {
+                  return Promise.resolve({ error: null });
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  setSupabaseClient(mockSupabase);
+
+  const req = { playerId: 'usr-expired' };
+  const res = createMockResponse();
+
+  await getActiveRoundHandler(req, res, () => {});
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.data, null);
+  assert.equal(updatedStatus, 'expired');
 });
