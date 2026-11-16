@@ -7,6 +7,7 @@ const PROFILE_CACHE_KEY = 'iss_cache_profile';
 const LEADERBOARD_CACHE_KEY = 'iss_cache_leaderboard';
 const DRAFT_GUESS_KEY = 'iss_draft_guess';
 const ACTIVE_ROUND_KEY = 'iss_active_round';
+const TUTORIAL_DONE_KEY = 'iss_tutorial_done';
 
 const state = {
   isConfigured: false,
@@ -22,6 +23,9 @@ const state = {
   roundResult: null,
   roundError: null,
   leaderboard: null,
+  isPractice: false,
+  practiceResult: null,
+  tutorialDone: false,
 };
 
 const listeners = new Set();
@@ -202,6 +206,41 @@ export function clearDraftGuess() {
   }
 }
 
+export function isTutorialDone() {
+  try {
+    return localStorage.getItem(TUTORIAL_DONE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setTutorialDone(done = true) {
+  state.tutorialDone = Boolean(done);
+  try {
+    if (done) {
+      localStorage.setItem(TUTORIAL_DONE_KEY, 'true');
+    } else {
+      localStorage.removeItem(TUTORIAL_DONE_KEY);
+    }
+  } catch {
+    // Abaikan jika storage dibatasi
+  }
+  notify();
+}
+
+export function setPracticeMode(active) {
+  state.isPractice = Boolean(active);
+  if (!active) {
+    state.practiceResult = null;
+  }
+  notify();
+}
+
+export function setPracticeResult(result) {
+  state.practiceResult = result;
+  notify();
+}
+
 export function resetStore() {
   state.user = null;
   state.token = null;
@@ -214,11 +253,15 @@ export function resetStore() {
   state.roundStatus = 'idle';
   state.roundResult = null;
   state.roundError = null;
+  state.isPractice = false;
+  state.practiceResult = null;
+  state.tutorialDone = false;
 
   clearProfileCache();
   clearDraftGuess();
   try {
     localStorage.removeItem(ACTIVE_ROUND_KEY);
+    localStorage.removeItem(TUTORIAL_DONE_KEY);
   } catch {
     // Abaikan jika storage dibatasi
   }

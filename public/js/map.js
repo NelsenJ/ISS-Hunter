@@ -14,6 +14,8 @@ let mapInstance = null;
 let tileLayer = null;
 let issMarker = null;
 let issTrailLayer = null;
+let practiceLayer = null;
+let isPracticeGuideActive = false;
 let guessMarker = null;
 let answerMarker = null;
 let connectionLine = null;
@@ -205,6 +207,7 @@ export function initMap(containerEl, currentTheme = 'light', onMapClick = null) 
 
   // Lapisan garis jejak ISS
   issTrailLayer = window.L.layerGroup().addTo(mapInstance);
+  practiceLayer = window.L.layerGroup().addTo(mapInstance);
 
   // Tangkap event klik pada peta untuk menaruh tebakan
   mapInstance.on('click', (e) => {
@@ -270,6 +273,11 @@ export function updateIssPosition(pos) {
   // Otomatis sambungkan ujung terdepan jejak ke posisi baru ISS
   if (lastTrailPoints.length > 0) {
     renderTrailLines(lastTrailPoints);
+  }
+
+  // Perbarui garis perkiraan arah latihan jika sedang aktif
+  if (isPracticeGuideActive) {
+    renderPracticeProjection(pos, lastKnownBearing);
   }
 }
 
@@ -437,4 +445,85 @@ export function clearRoundResult() {
   }
 
   setGuessMarker(null);
+}
+
+/**
+ * Menghitung titik tujuan pada bola bumi berdasarkan koordinat awal, bearing, dan jarak.
+ *
+ * @param {number} lat
+ * @param {number} lng
+ * @param {number} bearingDeg
+ * @param {number} distanceKm
+ * @returns {{ lat: number, lng: number }}
+ */
+export function calculateDestinationPoint(lat, lng, bearingDeg, distanceKm) {
+  const R = 6371;
+  const delta = distanceKm / R;
+  const theta = (bearingDeg * Math.PI) / 180;
+  const phi1 = (lat * Math.PI) / 180;
+  const lambda1 = (lng * Math.PI) / 180;
+
+  const sinPhi2 =
+    Math.sin(phi1) * Math.cos(delta) + Math.cos(phi1) * Math.sin(delta) * Math.cos(theta);
+  const phi2 = Math.asin(Math.max(-1, Math.min(1, sinPhi2)));
+
+  const y = Math.sin(theta) * Math.sin(delta) * Math.cos(phi1);
+  const x = Math.cos(delta) - Math.sin(phi1) * sinPhi2;
+  const lambda2 = lambda1 + Math.atan2(y, x);
+
+  const resLat = (phi2 * 180) / Math.PI;
+  let resLng = (lambda2 * 180) / Math.PI;
+  resLng = normalizeLng(resLng);
+
+  return {
+    lat: Number(resLat.toFixed(4)),
+    lng: Number(resLng.toFixed(4)),
+  };
+}
+
+function renderPracticeProjection(pos, bearing) {
+  if (!mapInstance || !practiceLayer) return;
+  practiceLayer.clearLayers();
+
+  const points = [];
+  const totalKm = 4600; // Jarak tempuh perkiraan ~10 menit
+  const steps = 8;
+  for (let i = 0; i <= steps; i++) {
+    const km = (totalKm / steps) * i;
+    points.push(calculateDestinationPoint(pos.lat, pos.lng, bearing, km));
+  }
+
+  const segments = splitAntimeridianSegments(points);
+  for (const seg of segments) {
+    if (seg.length >= 2) {
+      window.L.polyline(seg, {
+        color: 'var(--accent)',
+        weight: 2.5,
+        dashArray: '6, 8',
+        opacity: 0.85,
+        lineCap: 'round',
+      }).addTo(practiceLayer);
+    }
+  }
+}
+
+/**
+ * Mengaktifkan atau menonaktifkan alat bantu garis putus-putus perkiraan arah orbit pada mode latihan.
+ *
+ * @param {boolean} enable
+ */
+export function enablePracticeGuide(enable = true) {
+  isPracticeGuideActive = Boolean(enable);
+  if (!isPracticeGuideActive) {
+    if (practiceLayer) practiceLayer.clearLayers();
+  } else if (latestIssPos) {
+    renderPracticeProjection(latestIssPos, lastKnownBearing);
+  }
+}
+
+/**
+ * Membersihkan alat bantu perkiraan arah latihan dari peta.
+ */
+export function clearPracticeGuide() {
+  enablePracticeGuide(false);
 }

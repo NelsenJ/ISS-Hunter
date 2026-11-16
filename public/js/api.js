@@ -84,5 +84,13 @@ export const submitGuess = (roundId, { lat, lng }, token) =>
     token,
   });
 
+// Ronde latihan (stateless, tanpa DB)
+export const submitPracticeGuess = ({ lat, lng }, token) =>
+  apiRequest('/api/practice', {
+    method: 'POST',
+    body: { lat, lng },
+    token,
+  });
+
 // Leaderboard global (top 20)
 export const getLeaderboard = () => apiRequest('/api/leaderboard');

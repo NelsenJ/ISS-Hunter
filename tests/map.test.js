@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { normalizeLng, adjustRelativeLng } from '../public/js/map.js';
+import { normalizeLng, adjustRelativeLng, calculateDestinationPoint } from '../public/js/map.js';
 
 test('normalizeLng mempertahankan longitude dalam rentang standar -180 sampai 180', () => {
   assert.equal(normalizeLng(0), 0);
@@ -35,4 +35,16 @@ test('adjustRelativeLng menyesuaikan longitude target saat melintasi antimeridia
   // Kasus normal (tidak melintasi batas 180°): nilai tidak berubah
   assert.equal(adjustRelativeLng(110, 106.8), 110);
   assert.equal(adjustRelativeLng(-74, -73), -74);
+});
+
+test('calculateDestinationPoint menghitung proyeksi titik tujuan dengan bearing dan jarak', () => {
+  // Titik ekuator (0, 0) mengarah ke timur (bearing 90) sejauh 1111 km (~10 derajat bujur)
+  const destEast = calculateDestinationPoint(0, 0, 90, 1111.95);
+  assert.ok(Math.abs(destEast.lat - 0) < 0.1);
+  assert.ok(Math.abs(destEast.lng - 10) < 0.1);
+
+  // Titik ekuator (0, 0) mengarah ke utara (bearing 0) sejauh 1111 km (~10 derajat lintang)
+  const destNorth = calculateDestinationPoint(0, 0, 0, 1111.95);
+  assert.ok(Math.abs(destNorth.lat - 10) < 0.1);
+  assert.ok(Math.abs(destNorth.lng - 0) < 0.1);
 });

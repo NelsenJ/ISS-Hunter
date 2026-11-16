@@ -15,9 +15,19 @@ import {
   loadSavedDraftGuess,
   setLeaderboardData,
   loadLeaderboardCache,
+  isTutorialDone,
+  setPracticeMode,
+  setPracticeResult,
 } from './store.js';
 import { signIn, signUp, signOut } from './auth.js';
-import { createProfile, getMe, startRound, submitGuess, getLeaderboard } from './api.js';
+import {
+  createProfile,
+  getMe,
+  startRound,
+  submitGuess,
+  submitPracticeGuess,
+  getLeaderboard,
+} from './api.js';
 import {
   initMap,
   setMapTheme,
@@ -26,7 +36,10 @@ import {
   setGuessMarker,
   showRoundResult,
   clearRoundResult,
+  enablePracticeGuide,
+  clearPracticeGuide,
 } from './map.js';
+import { startInteractiveTutorial, isTutorialActive } from './tutorial.js';
 import {
   startIssPolling,
   fetchIssTrail,
@@ -52,14 +65,18 @@ export function initUI(container) {
   // Pasang keyboard listener global: Esc menghapus tebakan, Enter mengunci
   document.addEventListener('keydown', (e) => {
     const state = getState();
-    if (!state.token || !state.player || state.roundStatus !== 'active') return;
+    if (!state.token || !state.player) return;
 
     if (e.key === 'Escape') {
-      clearDraftGuess();
-      setGuessMarker(null);
+      if (state.roundStatus === 'active' || state.isPractice) {
+        clearDraftGuess();
+        setGuessMarker(null);
+      }
     } else if (e.key === 'Enter') {
-      if (state.draftGuess && state.activeRound) {
+      if (state.draftGuess && state.activeRound && state.roundStatus === 'active') {
         lockGuessAction();
+      } else if (state.draftGuess && state.isPractice && !state.practiceResult) {
+        lockPracticeGuessAction();
       }
     }
   });
@@ -118,9 +135,16 @@ function renderHeader(state) {
     tutorialBtn.style.padding = '0 var(--space-2)';
     tutorialBtn.textContent = 'Panduan';
     tutorialBtn.addEventListener('click', () => {
-      activeTab = 'tutorial';
-      bottomSheetExpanded = true;
-      render(state);
+      startInteractiveTutorial({
+        onStartPractice: () => {
+          startPracticeAction();
+        },
+        onComplete: () => {
+          activeTab = 'tutorial';
+          bottomSheetExpanded = true;
+          render(getState());
+        },
+      });
     });
 
     const logoutBtn = document.createElement('button');
@@ -451,7 +475,7 @@ function renderGameScreen(state) {
     const theme = document.documentElement.getAttribute('data-theme') || getPreferredTheme();
     initMap(mapContainer, theme, (coords) => {
       const currentState = getState();
-      if (currentState.roundStatus === 'active') {
+      if (currentState.roundStatus === 'active' || currentState.isPractice) {
         setDraftGuess(coords);
         setGuessMarker(coords);
       }
@@ -470,10 +494,10 @@ function renderGameScreen(state) {
       .catch((err) => console.warn('Gagal memuat jejak:', err.message));
 
     const savedDraft = state.draftGuess || loadSavedDraftGuess();
-    if (state.roundStatus === 'active' && savedDraft) {
+    if ((state.roundStatus === 'active' || state.isPractice) && savedDraft) {
       setDraftGuess(savedDraft);
       setGuessMarker(savedDraft);
-    } else if (state.roundStatus !== 'active') {
+    } else if (state.roundStatus !== 'active' && !state.isPractice) {
       clearDraftGuess();
       setGuessMarker(null);
     }
@@ -494,6 +518,22 @@ function renderGameScreen(state) {
   renderMapLegend(viewport);
   renderDesktopPanel(viewport, state);
   renderBottomSheet(viewport, state);
+
+  // Onboarding untuk pemain baru (Fase B)
+  if (!isTutorialDone() && !isTutorialActive() && state.player) {
+    setTimeout(() => {
+      if (!isTutorialDone() && !isTutorialActive()) {
+        startInteractiveTutorial({
+          onStartPractice: () => {
+            startPracticeAction();
+          },
+          onComplete: () => {
+            render(getState());
+          },
+        });
+      }
+    }, 400);
+  }
 }
 
 function createTabNavigation(currentTab, onSelect) {
@@ -700,6 +740,151 @@ function renderRoundContent(container, state) {
     return;
   }
 
+  // MODE LATIHAN (Fase B)
+  if (state.isPractice) {
+    if (state.practiceResult) {
+      const practiceBox = document.createElement('div');
+      practiceBox.className = 'stat-list';
+
+      const badgeRow = document.createElement('div');
+      badgeRow.style.marginBottom = 'var(--space-2)';
+      const badge = document.createElement('span');
+      badge.className = 'practice-badge';
+      badge.textContent = 'Hasil Ronde Latihan';
+      badgeRow.append(badge);
+
+      const distRow = document.createElement('div');
+      distRow.className = 'stat-row';
+      const distLabel = document.createElement('span');
+      distLabel.className = 'stat-label';
+      distLabel.textContent = 'Jarak Tebakan';
+      const distVal = document.createElement('span');
+      distVal.className = 'stat-value tabular';
+      distVal.textContent = `${state.practiceResult.distanceKm.toFixed(1)} km`;
+      distRow.append(distLabel, distVal);
+
+      practiceBox.append(badgeRow, distRow);
+
+      const noteBox = document.createElement('div');
+      noteBox.className = 'panel';
+      noteBox.style.marginTop = 'var(--space-3)';
+      noteBox.style.backgroundColor = 'var(--surface-hover)';
+
+      const noteText = document.createElement('p');
+      noteText.style.fontSize = 'var(--text-xs)';
+      noteText.style.color = 'var(--text-secondary)';
+      noteText.style.lineHeight = '1.5';
+      noteText.textContent = state.practiceResult.message;
+
+      const disclaimer = document.createElement('p');
+      disclaimer.style.fontSize = 'var(--text-xs)';
+      disclaimer.style.color = 'var(--text-secondary)';
+      disclaimer.style.marginTop = 'var(--space-2)';
+      disclaimer.textContent =
+        'Ronde latihan bersifat bebas tanpa skor dan tidak mempengaruhi statistik atau leaderboard.';
+
+      noteBox.append(noteText, disclaimer);
+
+      const btnWrap = document.createElement('div');
+      btnWrap.style.display = 'flex';
+      btnWrap.style.flexDirection = 'column';
+      btnWrap.style.gap = 'var(--space-2)';
+      btnWrap.style.marginTop = 'var(--space-4)';
+
+      const retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'btn btn-secondary';
+      retryBtn.textContent = 'Ulangi Latihan';
+      retryBtn.addEventListener('click', () => {
+        setPracticeResult(null);
+        clearRoundResult();
+        clearDraftGuess();
+      });
+
+      const startRealBtn = document.createElement('button');
+      startRealBtn.type = 'button';
+      startRealBtn.className = 'btn btn-primary';
+      startRealBtn.textContent = 'Mulai Ronde Sungguhan';
+      startRealBtn.addEventListener('click', () => {
+        setPracticeMode(false);
+        clearPracticeGuide();
+        clearRoundResult();
+        clearDraftGuess();
+        startNewRoundAction();
+      });
+
+      btnWrap.append(retryBtn, startRealBtn);
+      container.append(practiceBox, noteBox, btnWrap);
+      return;
+    }
+
+    // Ronde latihan aktif (sedang menebak)
+    const practiceActiveBox = document.createElement('div');
+
+    const badge = document.createElement('div');
+    badge.className = 'practice-badge';
+    badge.style.marginBottom = 'var(--space-3)';
+    badge.textContent = 'Mode Latihan (Tanpa Skor)';
+
+    const guideNote = document.createElement('p');
+    guideNote.className = 'form-hint';
+    guideNote.style.marginBottom = 'var(--space-3)';
+    guideNote.style.lineHeight = '1.4';
+    guideNote.textContent =
+      'Gunakan garis putus-putus pada peta sebagai perkiraan arah orbit ISS. Klik peta untuk menaruh tebakanmu.';
+
+    practiceActiveBox.append(badge, guideNote);
+
+    const guessInfo = document.createElement('div');
+    guessInfo.className = 'panel';
+    guessInfo.style.marginBottom = 'var(--space-4)';
+
+    if (state.draftGuess) {
+      const latText = state.draftGuess.lat.toFixed(4);
+      const lngText = state.draftGuess.lng.toFixed(4);
+      const row = document.createElement('div');
+      row.className = 'stat-row';
+      const label = document.createElement('span');
+      label.className = 'stat-label';
+      label.textContent = 'Koordinat Pilihan';
+      const value = document.createElement('span');
+      value.className = 'stat-value tabular';
+      value.textContent = `${latText}°, ${lngText}°`;
+      row.append(label, value);
+      guessInfo.append(row);
+    } else {
+      const emptyHint = document.createElement('p');
+      emptyHint.style.fontSize = 'var(--text-xs)';
+      emptyHint.style.color = 'var(--text-secondary)';
+      emptyHint.textContent = 'Belum ada tebakan. Klik di mana saja pada peta.';
+      guessInfo.append(emptyHint);
+    }
+
+    const lockBtn = document.createElement('button');
+    lockBtn.type = 'button';
+    lockBtn.className = 'btn btn-primary';
+    lockBtn.style.width = '100%';
+    lockBtn.disabled = !state.draftGuess;
+    lockBtn.textContent = 'Kunci Tebakan Latihan';
+    lockBtn.addEventListener('click', lockPracticeGuessAction);
+
+    const exitBtn = document.createElement('button');
+    exitBtn.type = 'button';
+    exitBtn.className = 'btn btn-ghost';
+    exitBtn.style.width = '100%';
+    exitBtn.style.marginTop = 'var(--space-2)';
+    exitBtn.textContent = 'Batal / Ronde Sungguhan';
+    exitBtn.addEventListener('click', () => {
+      setPracticeMode(false);
+      clearPracticeGuide();
+      clearRoundResult();
+      clearDraftGuess();
+    });
+
+    container.append(practiceActiveBox, guessInfo, lockBtn, exitBtn);
+    return;
+  }
+
   if (state.roundStatus === 'result' && state.roundResult) {
     const resultBox = document.createElement('div');
     resultBox.className = 'stat-list';
@@ -884,10 +1069,18 @@ function renderRoundContent(container, state) {
   startBtn.type = 'button';
   startBtn.className = 'btn btn-primary';
   startBtn.style.width = '100%';
-  startBtn.textContent = 'Mulai Ronde';
+  startBtn.textContent = 'Mulai Ronde Sungguhan';
   startBtn.addEventListener('click', startNewRoundAction);
 
-  container.append(emptyBox, startBtn);
+  const practiceBtn = document.createElement('button');
+  practiceBtn.type = 'button';
+  practiceBtn.className = 'btn btn-secondary';
+  practiceBtn.style.width = '100%';
+  practiceBtn.style.marginTop = 'var(--space-2)';
+  practiceBtn.textContent = 'Coba Ronde Latihan';
+  practiceBtn.addEventListener('click', startPracticeAction);
+
+  container.append(emptyBox, startBtn, practiceBtn);
 }
 
 function renderLeaderboardContent(container, state) {
@@ -1024,7 +1217,7 @@ function renderStatsContent(container, state) {
   container.append(statList, badgeSection);
 }
 
-function renderTutorialContent(container, state) {
+function renderTutorialContent(container) {
   const wrapper = document.createElement('div');
   wrapper.style.display = 'flex';
   wrapper.style.flexDirection = 'column';
@@ -1143,18 +1336,32 @@ function renderTutorialContent(container, state) {
   guideCard.append(guideTitle, stepsList);
 
   // 4. Tombol Aksi
+  const btnGroup = document.createElement('div');
+  btnGroup.style.display = 'flex';
+  btnGroup.style.flexDirection = 'column';
+  btnGroup.style.gap = 'var(--space-2)';
+  btnGroup.style.marginTop = 'var(--space-1)';
+
+  const practiceBtn = document.createElement('button');
+  practiceBtn.type = 'button';
+  practiceBtn.className = 'btn btn-secondary';
+  practiceBtn.style.width = '100%';
+  practiceBtn.textContent = 'Coba Ronde Latihan (Alat Bantu)';
+  practiceBtn.addEventListener('click', startPracticeAction);
+
   const playBtn = document.createElement('button');
   playBtn.type = 'button';
   playBtn.className = 'btn btn-primary';
   playBtn.style.width = '100%';
-  playBtn.style.marginTop = 'var(--space-1)';
-  playBtn.textContent = 'Mulai Bermain!';
+  playBtn.textContent = 'Mulai Ronde Sungguhan!';
   playBtn.addEventListener('click', () => {
     activeTab = 'round';
-    render(state);
+    startNewRoundAction();
   });
 
-  wrapper.append(introCard, factsList, guideCard, playBtn);
+  btnGroup.append(practiceBtn, playBtn);
+
+  wrapper.append(introCard, factsList, guideCard, btnGroup);
   container.append(wrapper);
 }
 
@@ -1173,6 +1380,8 @@ async function startNewRoundAction() {
   if (!state.token) return;
 
   try {
+    setPracticeMode(false);
+    clearPracticeGuide();
     clearRoundResult();
     const roundData = await startRound(state.token);
     setActiveRound(roundData);
@@ -1184,6 +1393,34 @@ async function startNewRoundAction() {
       .catch(() => {});
   } catch (err) {
     setRoundStatus('idle', null, err.message || 'Gagal memulai ronde baru.');
+  }
+}
+
+function startPracticeAction() {
+  clearRoundResult();
+  clearDraftGuess();
+  setActiveRound(null);
+  setPracticeMode(true);
+  enablePracticeGuide(true);
+  activeTab = 'round';
+  bottomSheetExpanded = true;
+  render(getState());
+}
+
+async function lockPracticeGuessAction() {
+  const state = getState();
+  if (!state.token || !state.draftGuess) return;
+
+  const coords = state.draftGuess;
+  setRoundStatus('submitting');
+
+  try {
+    const result = await submitPracticeGuess(coords, state.token);
+    showRoundResult(coords, { lat: result.answer.lat, lng: result.answer.lng });
+    setPracticeResult(result);
+    setRoundStatus('idle');
+  } catch (err) {
+    setRoundStatus('idle', null, err.message || 'Gagal menghitung tebakan latihan.');
   }
 }
 
