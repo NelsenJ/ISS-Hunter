@@ -27,7 +27,12 @@ import {
   showRoundResult,
   clearRoundResult,
 } from './map.js';
-import { startIssPolling, fetchIssTrail } from './iss.js';
+import {
+  startIssPolling,
+  fetchIssTrail,
+  fetchCurrentIssPosition,
+  setOnTrailUpdate,
+} from './iss.js';
 import { getPreferredTheme } from './theme.js';
 
 let appContainer = null;
@@ -36,7 +41,7 @@ let headerProgressFillEl = null;
 let authMode = 'login'; // 'login' | 'register' | 'profile'
 let mapInitialized = false;
 let countdownTimer = null;
-let activeTab = 'round'; // 'round' | 'leaderboard' | 'stats'
+let activeTab = 'round'; // 'round' | 'leaderboard' | 'stats' | 'tutorial'
 let bottomSheetExpanded = false;
 
 export function initUI(container) {
@@ -106,6 +111,16 @@ function renderHeader(state) {
     levelEl.className = 'tag tag-accent tabular';
     levelEl.textContent = `Lv. ${level}`;
 
+    const tutorialBtn = document.createElement('button');
+    tutorialBtn.type = 'button';
+    tutorialBtn.className = 'btn btn-ghost';
+    tutorialBtn.style.padding = '0 var(--space-2)';
+    tutorialBtn.textContent = 'Panduan';
+    tutorialBtn.addEventListener('click', () => {
+      activeTab = 'tutorial';
+      render(state);
+    });
+
     const logoutBtn = document.createElement('button');
     logoutBtn.type = 'button';
     logoutBtn.className = 'btn btn-ghost';
@@ -120,7 +135,7 @@ function renderHeader(state) {
       }
     });
 
-    headerPlayerEl.append(nameEl, levelEl, logoutBtn);
+    headerPlayerEl.append(nameEl, levelEl, tutorialBtn, logoutBtn);
 
     if (headerProgressFillEl) {
       headerProgressFillEl.style.width = `${progressPercent}%`;
@@ -168,41 +183,13 @@ function renderAuthScreen(state) {
   formErrorEl.className = 'form-error';
   formErrorEl.style.marginBottom = 'var(--space-3)';
 
-  let emailInput = null;
+  let userInput = null;
+  let userHint = null;
   let passwordInput = null;
-
-  if (!state.profileRequired && authMode !== 'profile') {
-    const emailGroup = document.createElement('div');
-    emailGroup.className = 'form-group';
-    const emailLabel = document.createElement('label');
-    emailLabel.className = 'form-label';
-    emailLabel.textContent = 'Email';
-    emailInput = document.createElement('input');
-    emailInput.type = 'email';
-    emailInput.className = 'input';
-    emailInput.required = true;
-    emailInput.autocomplete = 'username';
-    emailGroup.append(emailLabel, emailInput);
-
-    const passGroup = document.createElement('div');
-    passGroup.className = 'form-group';
-    const passLabel = document.createElement('label');
-    passLabel.className = 'form-label';
-    passLabel.textContent = 'Kata Sandi';
-    passwordInput = document.createElement('input');
-    passwordInput.type = 'password';
-    passwordInput.className = 'input';
-    passwordInput.required = true;
-    passwordInput.autocomplete = authMode === 'register' ? 'new-password' : 'current-password';
-    passGroup.append(passLabel, passwordInput);
-
-    form.append(emailGroup, passGroup);
-  }
-
   let nameInput = null;
   let nameHint = null;
 
-  if (state.profileRequired || authMode === 'register' || authMode === 'profile') {
+  if (state.profileRequired || authMode === 'profile') {
     const nameGroup = document.createElement('div');
     nameGroup.className = 'form-group';
     const nameLabel = document.createElement('label');
@@ -215,6 +202,7 @@ function renderAuthScreen(state) {
     nameInput.maxLength = 20;
     nameInput.required = true;
     nameInput.autocomplete = 'nickname';
+    nameInput.placeholder = 'cth: astronot123';
 
     nameHint = document.createElement('span');
     nameHint.className = 'form-hint tabular';
@@ -234,6 +222,58 @@ function renderAuthScreen(state) {
 
     nameGroup.append(nameLabel, nameInput, nameHint);
     form.append(nameGroup);
+  } else {
+    // Mode Login atau Register: CUKUP USERNAME DAN KATA SANDI (tanpa email)
+    const userGroup = document.createElement('div');
+    userGroup.className = 'form-group';
+    const userLabel = document.createElement('label');
+    userLabel.className = 'form-label';
+    userLabel.textContent = authMode === 'register' ? 'Username (3–20 karakter)' : 'Username';
+
+    userInput = document.createElement('input');
+    userInput.type = 'text';
+    userInput.className = 'input';
+    userInput.maxLength = 20;
+    userInput.required = true;
+    userInput.autocomplete = 'username';
+    userInput.placeholder = 'cth: astronot123';
+
+    if (authMode === 'register') {
+      userHint = document.createElement('span');
+      userHint.className = 'form-hint tabular';
+      userHint.textContent = '0/20 karakter';
+
+      userInput.addEventListener('input', () => {
+        const len = userInput.value.trim().length;
+        userHint.textContent = `${len}/20 karakter`;
+        if (len > 0 && (len < 3 || len > 20)) {
+          userHint.style.color = 'var(--danger)';
+          submitBtn.disabled = true;
+        } else {
+          userHint.style.color = 'var(--text-secondary)';
+          submitBtn.disabled = false;
+        }
+      });
+      userGroup.append(userLabel, userInput, userHint);
+    } else {
+      userGroup.append(userLabel, userInput);
+    }
+
+    const passGroup = document.createElement('div');
+    passGroup.className = 'form-group';
+    const passLabel = document.createElement('label');
+    passLabel.className = 'form-label';
+    passLabel.textContent =
+      authMode === 'register' ? 'Kata Sandi (minimal 6 karakter)' : 'Kata Sandi';
+    passwordInput = document.createElement('input');
+    passwordInput.type = 'password';
+    passwordInput.className = 'input';
+    passwordInput.required = true;
+    passwordInput.autocomplete = authMode === 'register' ? 'new-password' : 'current-password';
+    passwordInput.placeholder = '••••••••';
+    passGroup.append(passLabel, passwordInput);
+
+    form.append(userGroup, passGroup);
   }
 
   const submitBtn = document.createElement('button');
@@ -309,28 +349,32 @@ function renderAuthScreen(state) {
         return;
       }
 
-      const email = emailInput?.value.trim() ?? '';
+      const username = userInput?.value.trim() ?? '';
       const password = passwordInput?.value ?? '';
 
-      if (!email || !password) {
-        formErrorEl.textContent = 'Email dan kata sandi wajib diisi.';
+      if (!username || !password) {
+        formErrorEl.textContent = 'Username dan kata sandi wajib diisi.';
         submitBtn.disabled = false;
         return;
       }
 
       if (authMode === 'register') {
-        const displayName = nameInput?.value.trim() ?? '';
-        if (displayName.length < 3 || displayName.length > 20) {
-          formErrorEl.textContent = 'Nama tampilan harus antara 3 dan 20 karakter.';
+        if (username.length < 3 || username.length > 20) {
+          formErrorEl.textContent = 'Username harus antara 3 dan 20 karakter.';
           submitBtn.disabled = false;
           return;
         }
 
-        const data = await signUp(email, password);
+        if (password.length < 6) {
+          formErrorEl.textContent = 'Kata sandi minimal 6 karakter.';
+          submitBtn.disabled = false;
+          return;
+        }
+
+        const data = await signUp(username, password);
         const token = data.session?.access_token;
 
         if (token) {
-          await createProfile(displayName, token);
           const meData = await getMe(token);
           import('./store.js').then(({ setAuthSession, setPlayerData }) => {
             setAuthSession(data.user, token);
@@ -342,7 +386,7 @@ function renderAuthScreen(state) {
           render(state);
         }
       } else {
-        const data = await signIn(email, password);
+        const data = await signIn(username, password);
         const token = data.session?.access_token;
         if (!token) throw new Error('Gagal mendapatkan token sesi.');
 
@@ -365,7 +409,7 @@ function renderAuthScreen(state) {
       }
     } catch (err) {
       if (err.code === 'NAME_TAKEN' || err.status === 409) {
-        formErrorEl.textContent = 'Nama tampilan sudah dipakai. Pilih nama lain.';
+        formErrorEl.textContent = 'Username sudah dipakai. Pilih nama lain.';
       } else if (err.status === 400) {
         formErrorEl.textContent = err.message || 'Input tidak valid.';
       } else {
@@ -413,6 +457,10 @@ function renderGameScreen(state) {
 
     startIssPolling((pos) => {
       updateIssPosition(pos);
+    });
+
+    setOnTrailUpdate((trail) => {
+      updateIssTrail(trail);
     });
 
     fetchIssTrail()
@@ -488,7 +536,17 @@ function renderDesktopPanel(viewport, state) {
     render(state);
   });
 
-  tabHeader.append(roundTabBtn, lbTabBtn, statsTabBtn);
+  const tutorialTabBtn = document.createElement('button');
+  tutorialTabBtn.type = 'button';
+  tutorialTabBtn.className = 'tab-btn';
+  tutorialTabBtn.setAttribute('aria-selected', activeTab === 'tutorial' ? 'true' : 'false');
+  tutorialTabBtn.textContent = 'Panduan';
+  tutorialTabBtn.addEventListener('click', () => {
+    activeTab = 'tutorial';
+    render(state);
+  });
+
+  tabHeader.append(roundTabBtn, lbTabBtn, statsTabBtn, tutorialTabBtn);
 
   const panelBody = document.createElement('div');
   panelBody.className = 'side-panel-body';
@@ -497,8 +555,10 @@ function renderDesktopPanel(viewport, state) {
     renderRoundContent(panelBody, state);
   } else if (activeTab === 'leaderboard') {
     renderLeaderboardContent(panelBody, state);
-  } else {
+  } else if (activeTab === 'stats') {
     renderStatsContent(panelBody, state);
+  } else {
+    renderTutorialContent(panelBody, state);
   }
 
   panel.append(tabHeader, panelBody);
@@ -895,6 +955,140 @@ function renderStatsContent(container, state) {
   container.append(statList, badgeSection);
 }
 
+function renderTutorialContent(container, state) {
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'flex';
+  wrapper.style.flexDirection = 'column';
+  wrapper.style.gap = 'var(--space-3)';
+
+  // 1. Kartu Pengenalan ISS
+  const introCard = document.createElement('div');
+  introCard.className = 'panel';
+  introCard.style.backgroundColor = 'var(--surface-hover)';
+
+  const introTitle = document.createElement('h3');
+  introTitle.style.fontSize = 'var(--text-sm)';
+  introTitle.style.fontWeight = '600';
+  introTitle.style.color = 'var(--accent)';
+  introTitle.style.marginBottom = 'var(--space-1)';
+  introTitle.textContent = 'Misi: Prediksi Posisi ISS (+10 Menit)';
+
+  const introDesc = document.createElement('p');
+  introDesc.style.fontSize = 'var(--text-xs)';
+  introDesc.style.color = 'var(--text-secondary)';
+  introDesc.style.lineHeight = '1.5';
+  introDesc.textContent =
+    'ISS (Stasiun Luar Angkasa Internasional) meluncur di orbit Bumi pada ketinggian ~400 km dengan kecepatan dahsyat ~27.600 km/jam (~7,6 km/detik). Satu putaran penuh Bumi diselesaikan hanya dalam ~92 menit!';
+
+  introCard.append(introTitle, introDesc);
+
+  // 2. Fakta Angka
+  const factsList = document.createElement('div');
+  factsList.className = 'stat-list';
+  const facts = [
+    { label: 'Kecepatan Orbit', value: '~27.600 km/jam' },
+    { label: 'Jarak 10 Menit', value: '~4.600 km (~39° Bujur)' },
+    { label: 'Kemiringan Orbit', value: '51,6° terhadap Khatulistiwa' },
+    { label: '1 Keliling Bumi', value: '~92 menit' },
+  ];
+  for (const f of facts) {
+    const row = document.createElement('div');
+    row.className = 'stat-row';
+    const l = document.createElement('span');
+    l.className = 'stat-label';
+    l.textContent = f.label;
+    const v = document.createElement('span');
+    v.className = 'stat-value tabular';
+    v.style.fontSize = 'var(--text-xs)';
+    v.textContent = f.value;
+    row.append(l, v);
+    factsList.append(row);
+  }
+
+  // 3. Cara Membaca Peta & Menebak
+  const guideCard = document.createElement('div');
+  guideCard.className = 'panel';
+
+  const guideTitle = document.createElement('h3');
+  guideTitle.style.fontSize = 'var(--text-sm)';
+  guideTitle.style.fontWeight = '600';
+  guideTitle.style.marginBottom = 'var(--space-2)';
+  guideTitle.textContent = 'Cara Membaca Peta & Menebak';
+
+  const steps = [
+    {
+      num: '1',
+      title: 'Ikon Target & Panah',
+      desc: 'Menunjukkan posisi ISS saat ini secara live. Panah kecil di sekelilingnya menunjukkan arah ke mana ISS sedang terbang.',
+    },
+    {
+      num: '2',
+      title: 'Garis Jejak Oranye',
+      desc: 'Menunjukkan jalur yang telah dilalui ISS selama 10 menit ke belakang. Perhatikan lengkungan gelombang kurvanya.',
+    },
+    {
+      num: '3',
+      title: 'Tebak Jalur Masa Depan',
+      desc: 'Klik di peta pada titik yang kamu perkirakan akan dilewati ISS 10 menit ke depan (ditandai titik hitam).',
+    },
+    {
+      num: '4',
+      title: 'Kunci & Dapatkan Skor',
+      desc: 'Tekan "Kunci Tebakan" (atau Enter). Server akan mengambil koordinat nyata ISS pada menit ke-10 dan menghitung skor dari jaraknya!',
+    },
+  ];
+
+  const stepsList = document.createElement('div');
+  stepsList.style.display = 'flex';
+  stepsList.style.flexDirection = 'column';
+  stepsList.style.gap = 'var(--space-2)';
+
+  for (const s of steps) {
+    const stepRow = document.createElement('div');
+    stepRow.style.display = 'flex';
+    stepRow.style.gap = 'var(--space-2)';
+    stepRow.style.alignItems = 'flex-start';
+
+    const numBadge = document.createElement('span');
+    numBadge.className = 'tag tag-accent';
+    numBadge.style.minWidth = '20px';
+    numBadge.style.textAlign = 'center';
+    numBadge.textContent = s.num;
+
+    const content = document.createElement('div');
+    const t = document.createElement('div');
+    t.style.fontSize = 'var(--text-xs)';
+    t.style.fontWeight = '600';
+    t.textContent = s.title;
+
+    const d = document.createElement('div');
+    d.style.fontSize = 'var(--text-xs)';
+    d.style.color = 'var(--text-secondary)';
+    d.style.lineHeight = '1.4';
+    d.textContent = s.desc;
+
+    content.append(t, d);
+    stepRow.append(numBadge, content);
+    stepsList.append(stepRow);
+  }
+  guideCard.append(guideTitle, stepsList);
+
+  // 4. Tombol Aksi
+  const playBtn = document.createElement('button');
+  playBtn.type = 'button';
+  playBtn.className = 'btn btn-primary';
+  playBtn.style.width = '100%';
+  playBtn.style.marginTop = 'var(--space-1)';
+  playBtn.textContent = 'Mulai Bermain!';
+  playBtn.addEventListener('click', () => {
+    activeTab = 'round';
+    render(state);
+  });
+
+  wrapper.append(introCard, factsList, guideCard, playBtn);
+  container.append(wrapper);
+}
+
 function formatRemainingTime(startedAt) {
   const FIVE_MINUTES_SEC = 300;
   const elapsedSec = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
@@ -910,8 +1104,15 @@ async function startNewRoundAction() {
   if (!state.token) return;
 
   try {
+    clearRoundResult();
     const roundData = await startRound(state.token);
     setActiveRound(roundData);
+    fetchCurrentIssPosition()
+      .then((pos) => updateIssPosition(pos))
+      .catch(() => {});
+    fetchIssTrail()
+      .then((trail) => updateIssTrail(trail))
+      .catch(() => {});
   } catch (err) {
     setRoundStatus('idle', null, err.message || 'Gagal memulai ronde baru.');
   }

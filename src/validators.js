@@ -96,3 +96,18 @@ export function validateRoundId(id) {
 
   return num;
 }
+
+/**
+ * Mengubah username menjadi email deterministik untuk Supabase Auth.
+ * Menghindari ketergantungan input email pada pengguna.
+ *
+ * @param {string} username
+ * @returns {string}
+ */
+export function usernameToEmail(username) {
+  const clean = String(username || '')
+    .trim()
+    .toLowerCase();
+  const escaped = clean.replace(/[^a-z0-9]/g, (ch) => `_${ch.charCodeAt(0).toString(16)}`);
+  return `${escaped}@isshunter.app`;
+}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { requireAuth } from '../src/middleware/auth.js';
-import { createProfileHandler } from '../src/routes/profile.js';
+import { createProfileHandler, registerHandler } from '../src/routes/profile.js';
 import { getMeHandler } from '../src/routes/me.js';
 import { setSupabaseClient } from '../src/lib/supabase.js';
 
@@ -360,4 +360,121 @@ test('GET /api/me mengembalikan profil, level, progress, dan status badges denga
   assert.equal(res.body.data.stats.badges.pemula, true);
   assert.equal(res.body.data.stats.badges.navigator, true);
   assert.equal(res.body.data.stats.badges.sniper, true);
+});
+
+test('POST /api/profile/register menolak password kurang dari 6 karakter', async () => {
+  const req = { body: { username: 'Astronot', password: '123' } };
+  const res = createMockResponse();
+  let receivedError = null;
+
+  await registerHandler(req, res, (err) => {
+    receivedError = err;
+  });
+
+  assert.ok(receivedError);
+  assert.equal(receivedError.status, 400);
+  assert.equal(receivedError.code, 'INVALID_PASSWORD');
+});
+
+test('POST /api/profile/register menolak jika username sudah dipakai', async () => {
+  const mockSupabase = {
+    from(table) {
+      assert.equal(table, 'profiles');
+      return {
+        select() {
+          return {
+            ilike() {
+              return {
+                async maybeSingle() {
+                  return { data: { id: 'usr-ada' }, error: null };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  setSupabaseClient(mockSupabase);
+
+  const req = { body: { username: 'Astronot', password: 'password123' } };
+  const res = createMockResponse();
+  let receivedError = null;
+
+  await registerHandler(req, res, (err) => {
+    receivedError = err;
+  });
+
+  assert.ok(receivedError);
+  assert.equal(receivedError.status, 409);
+  assert.equal(receivedError.code, 'NAME_TAKEN');
+});
+
+test('POST /api/profile/register berhasil membuat user dan profil', async () => {
+  let createdAuthUser = null;
+  let insertedProfile = null;
+
+  const mockSupabase = {
+    auth: {
+      admin: {
+        async createUser(params) {
+          createdAuthUser = params;
+          return {
+            data: {
+              user: { id: 'usr-baru', email: params.email },
+            },
+            error: null,
+          };
+        },
+      },
+    },
+    from(table) {
+      assert.equal(table, 'profiles');
+      return {
+        select() {
+          return {
+            ilike() {
+              return {
+                async maybeSingle() {
+                  return { data: null, error: null };
+                },
+              };
+            },
+          };
+        },
+        insert(row) {
+          insertedProfile = row;
+          return {
+            select() {
+              return {
+                async single() {
+                  return {
+                    data: {
+                      id: row.id,
+                      display_name: row.display_name,
+                      created_at: '2026-11-15T12:00:00.000Z',
+                    },
+                    error: null,
+                  };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  setSupabaseClient(mockSupabase);
+
+  const req = { body: { username: 'AstronotBaru', password: 'password123' } };
+  const res = createMockResponse();
+
+  await registerHandler(req, res, () => {});
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.data.id, 'usr-baru');
+  assert.equal(res.body.data.displayName, 'AstronotBaru');
+  assert.equal(createdAuthUser.email_confirm, true);
+  assert.equal(insertedProfile.display_name, 'AstronotBaru');
 });

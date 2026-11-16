@@ -1,6 +1,6 @@
 /**
  * ISS Hunter — Auth Client
- * Satu-satunya modul pembungkus yang mengakses objek global `window.supabase`.
+ * Mengatur autentikasi berbasis username dan password (tanpa input email pengguna).
  */
 
 let client = null;
@@ -11,6 +11,21 @@ export function isSupabaseAvailable() {
 
 export function isAuthReady() {
   return client !== null;
+}
+
+/**
+ * Mengubah username menjadi email deterministik untuk Supabase Auth.
+ * Format selalu memenuhi spesifikasi email RFC dan GoTrue Supabase.
+ *
+ * @param {string} username
+ * @returns {string}
+ */
+export function usernameToEmail(username) {
+  const clean = String(username || '')
+    .trim()
+    .toLowerCase();
+  const escaped = clean.replace(/[^a-z0-9]/g, (ch) => `_${ch.charCodeAt(0).toString(16)}`);
+  return `${escaped}@isshunter.app`;
 }
 
 /**
@@ -60,34 +75,64 @@ export async function getAccessToken() {
   return session?.access_token ?? null;
 }
 
-export async function signUp(email, password) {
+/**
+ * Mendaftarkan akun baru dengan username dan password saja.
+ * Memanggil endpoint backend /api/profile/register agar email_confirm langsung aktif.
+ * Setelah pendaftaran berhasil, fungsi langsung melakukan sign-in agar sesi aktif.
+ *
+ * @param {string} username
+ * @param {string} password
+ * @returns {Promise<{ user: any, session: any }>}
+ */
+export async function signUp(username, password) {
   if (!client) {
     throw new Error('Layanan autentikasi belum terhubung. Konfigurasi Supabase diperlukan.');
   }
 
-  const { data, error } = await client.auth.signUp({
-    email,
-    password,
+  const res = await fetch('/api/profile/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
   });
 
-  if (error) {
+  const payload = await res.json().catch(() => null);
+
+  if (!res.ok || !payload?.ok) {
+    const error = new Error(payload?.error?.message || 'Gagal mendaftar akun.');
+    error.code = payload?.error?.code;
+    error.status = res.status;
     throw error;
   }
 
-  return data;
+  // Langsung sign-in agar klien browser mendapatkan token sesi JWT Supabase
+  return await signIn(username, password);
 }
 
-export async function signIn(email, password) {
+/**
+ * Masuk menggunakan username dan password.
+ * Username dipetakan secara deterministik ke format akun Supabase Auth.
+ *
+ * @param {string} username
+ * @param {string} password
+ * @returns {Promise<{ user: any, session: any }>}
+ */
+export async function signIn(username, password) {
   if (!client) {
     throw new Error('Layanan autentikasi belum terhubung. Konfigurasi Supabase diperlukan.');
   }
 
+  const email = usernameToEmail(username);
   const { data, error } = await client.auth.signInWithPassword({
     email,
     password,
   });
 
   if (error) {
+    if (error.message?.toLowerCase().includes('invalid login credentials')) {
+      const err = new Error('Username atau kata sandi salah.');
+      err.status = 401;
+      throw err;
+    }
     throw error;
   }
 

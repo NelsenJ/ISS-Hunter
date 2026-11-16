@@ -11,6 +11,11 @@ const POLLING_INTERVAL_MS = 5000;
 let usingProxy = false;
 let pollingTimer = null;
 let onPositionUpdateCallback = null;
+let onTrailUpdateCallback = null;
+
+export function setOnTrailUpdate(callback) {
+  onTrailUpdateCallback = callback;
+}
 
 export async function fetchCurrentIssPosition() {
   if (!usingProxy) {
@@ -86,12 +91,22 @@ export async function fetchIssTrail() {
 export function startIssPolling(callback) {
   onPositionUpdateCallback = callback;
 
+  let tickCount = 0;
+
   async function tick() {
     if (document.visibilityState === 'hidden') return;
     try {
       const pos = await fetchCurrentIssPosition();
       if (onPositionUpdateCallback) {
         onPositionUpdateCallback(pos);
+      }
+
+      // Setiap 25 detik (5 tick), segarkan juga jejak lintasan agar selalu tersambung rapi
+      tickCount++;
+      if (tickCount % 5 === 0 && onTrailUpdateCallback) {
+        fetchIssTrail()
+          .then((trail) => onTrailUpdateCallback(trail))
+          .catch(() => {});
       }
     } catch (err) {
       console.warn('Gagal memuat posisi ISS:', err.message);

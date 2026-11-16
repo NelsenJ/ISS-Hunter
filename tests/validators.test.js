@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { validateDisplayName, validateCoordinates, validateRoundId } from '../src/validators.js';
+import {
+  validateDisplayName,
+  validateCoordinates,
+  validateRoundId,
+  usernameToEmail,
+} from '../src/validators.js';
 
 test('validateDisplayName menerima nama 3 sampai 20 karakter', () => {
   assert.equal(validateDisplayName('Ali'), 'Ali'); // 3 karakter
@@ -88,4 +93,11 @@ test('validateRoundId menolak nilai bukan angka bulat positif', () => {
       (err) => err.code === 'INVALID_ROUND_ID' && err.status === 400,
     );
   }
+});
+
+test('usernameToEmail menghasilkan format email deterministik yang aman', () => {
+  assert.equal(usernameToEmail('budi'), 'budi@isshunter.app');
+  assert.equal(usernameToEmail('  Budi  '), 'budi@isshunter.app');
+  assert.equal(usernameToEmail('Kapten_ISS'), 'kapten_5fiss@isshunter.app');
+  assert.equal(usernameToEmail('user 123'), 'user_20123@isshunter.app');
 });
