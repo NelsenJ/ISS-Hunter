@@ -1,6 +1,6 @@
 /**
  * ISS Hunter — Store
- * Satu sumber kebenaran (single source of truth) untuk state aplikasi.
+ * Single source of truth for the application state.
  */
 
 const PROFILE_CACHE_KEY = 'iss_cache_profile';
@@ -48,6 +48,7 @@ const state = {
   isPractice: false,
   practiceResult: null,
   tutorialDone: false,
+  preferredSatellite: getStoredString('iss_pref_satellite', 'iss'),
 };
 
 const listeners = new Set();
@@ -94,7 +95,7 @@ export function setPlayerData(player, stats) {
         JSON.stringify({ player, stats, cachedAt: Date.now() }),
       );
     } catch {
-      // Abaikan jika localStorage dibatasi
+      // ignore storage errors
     }
   }
   notify();
@@ -117,7 +118,7 @@ export function setActiveRound(round) {
       localStorage.removeItem(ACTIVE_ROUND_KEY);
     }
   } catch {
-    // Abaikan jika storage dibatasi
+    // ignore storage errors
   }
 
   notify();
@@ -133,7 +134,7 @@ export function setDraftGuess(coords) {
       localStorage.removeItem(DRAFT_GUESS_KEY);
     }
   } catch {
-    // Abaikan jika storage dibatasi
+    // ignore storage errors
   }
 
   notify();
@@ -141,6 +142,17 @@ export function setDraftGuess(coords) {
 
 export function setIssPosition(pos) {
   state.issPosition = pos;
+  notify();
+}
+
+export function isTutorialDone() {
+  return Boolean(state.tutorialDone);
+}
+export function setTutorialDone(done) {
+  state.tutorialDone = Boolean(done);
+  try {
+    localStorage.setItem(TUTORIAL_DONE_KEY, state.tutorialDone ? '1' : '0');
+  } catch { void 0; }
   notify();
 }
 
@@ -158,7 +170,7 @@ export function setLeaderboardData(data) {
       localStorage.setItem(LEADERBOARD_CACHE_KEY, JSON.stringify(data));
     }
   } catch {
-    // Abaikan jika storage dibatasi
+    // ignore storage errors
   }
   notify();
 }
@@ -198,7 +210,7 @@ export function loadSavedActiveRound() {
     const raw = localStorage.getItem(ACTIVE_ROUND_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    // Cek apakah masih dalam batas 5 menit
+    // Discard if older than 5 min
     const ageMs = Date.now() - new Date(parsed.startedAt).getTime();
     if (ageMs > 5 * 60 * 1000) {
       localStorage.removeItem(ACTIVE_ROUND_KEY);
@@ -213,9 +225,7 @@ export function loadSavedActiveRound() {
 export function clearProfileCache() {
   try {
     localStorage.removeItem(PROFILE_CACHE_KEY);
-  } catch {
-    // Abaikan jika localStorage dibatasi
-  }
+  } catch { void 0; }
 }
 
 export function clearDraftGuess() {
@@ -223,74 +233,11 @@ export function clearDraftGuess() {
     localStorage.removeItem(DRAFT_GUESS_KEY);
     state.draftGuess = null;
     notify();
-  } catch {
-    // Abaikan jika storage dibatasi
-  }
-}
-
-export function isTutorialDone() {
-  try {
-    return localStorage.getItem(TUTORIAL_DONE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-export function setTutorialDone(done = true) {
-  state.tutorialDone = Boolean(done);
-  try {
-    if (done) {
-      localStorage.setItem(TUTORIAL_DONE_KEY, 'true');
-    } else {
-      localStorage.removeItem(TUTORIAL_DONE_KEY);
-    }
-  } catch {
-    // Abaikan jika storage dibatasi
-  }
-  notify();
-}
-
-export function setPreferredHorizon(horizon) {
-  const h = Number(horizon) || 600;
-  state.preferredHorizon = h;
-  try {
-    localStorage.setItem(PREF_HORIZON_KEY, String(h));
-  } catch {
-    // Abaikan
-  }
-  notify();
-}
-
-export function setPreferredDifficulty(diff) {
-  const d = diff || 'normal';
-  state.preferredDifficulty = d;
-  try {
-    localStorage.setItem(PREF_DIFF_KEY, d);
-  } catch {
-    // Abaikan
-  }
-  notify();
-}
-
-export function setLeaderboardType(type) {
-  state.leaderboardType = type || 'total';
-  notify();
-}
-
-export function setPracticeMode(active) {
-  state.isPractice = Boolean(active);
-  if (!active) {
-    state.practiceResult = null;
-  }
-  notify();
-}
-
-export function setPracticeResult(result) {
-  state.practiceResult = result;
-  notify();
+  } catch { void 0; }
 }
 
 export function resetStore() {
+  state.isConfigured = false;
   state.user = null;
   state.token = null;
   state.player = null;
@@ -302,18 +249,53 @@ export function resetStore() {
   state.roundStatus = 'idle';
   state.roundResult = null;
   state.roundError = null;
+  state.leaderboard = null;
   state.isPractice = false;
   state.practiceResult = null;
-  state.tutorialDone = false;
-
-  clearProfileCache();
-  clearDraftGuess();
   try {
     localStorage.removeItem(ACTIVE_ROUND_KEY);
-    localStorage.removeItem(TUTORIAL_DONE_KEY);
-  } catch {
-    // Abaikan jika storage dibatasi
-  }
+    localStorage.removeItem(DRAFT_GUESS_KEY);
+  } catch { void 0; }
+  notify();
+}
 
+export function setPracticeMode(active) {
+  state.isPractice = Boolean(active);
+  if (!active) state.practiceResult = null;
+  notify();
+}
+
+export function setPracticeResult(result) {
+  state.practiceResult = result;
+  notify();
+}
+
+export function setPreferredHorizon(horizon) {
+  const val = Number(horizon) || 600;
+  state.preferredHorizon = val;
+  try {
+    localStorage.setItem(PREF_HORIZON_KEY, String(val));
+  } catch { void 0; }
+  notify();
+}
+
+export function setPreferredDifficulty(diff) {
+  state.preferredDifficulty = diff || 'normal';
+  try {
+    localStorage.setItem(PREF_DIFF_KEY, state.preferredDifficulty);
+  } catch { void 0; }
+  notify();
+}
+
+export function setLeaderboardType(type) {
+  state.leaderboardType = type || 'total';
+  notify();
+}
+
+export function setPreferredSatellite(name) {
+  state.preferredSatellite = name || 'iss';
+  try {
+    localStorage.setItem('iss_pref_satellite', state.preferredSatellite);
+  } catch { void 0; }
   notify();
 }

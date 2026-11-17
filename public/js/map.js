@@ -211,8 +211,7 @@ export function initMap(containerEl, currentTheme = 'light', onMapClick = null) 
 
   // Hapus peta lama jika pernah diinisialisasi
   if (mapInstance) {
-    mapInstance.remove();
-    mapInstance = null;
+    destroyMap();
   }
 
   mapInstance = window.L.map(containerEl, {
@@ -516,6 +515,29 @@ export function clearRoundResult() {
   }
 
   setGuessMarker(null);
+}
+
+/**
+ * Menghancurkan seluruh instance Leaflet dan membersihkan semua layer/penanda.
+ */
+export function destroyMap() {
+  if (mapInstance) {
+    try {
+      mapInstance.remove();
+    } catch {
+      // abaikan error jika peta sudah dilepas
+    }
+    mapInstance = null;
+    tileLayer = null;
+    issMarker = null;
+    guessMarker = null;
+    answerMarker = null;
+    connectionLine = null;
+    issTrailLayer = null;
+    practiceLayer = null;
+    latestIssPos = null;
+    lastTrailPoints = [];
+  }
 }
 
 /**

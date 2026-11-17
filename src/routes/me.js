@@ -32,7 +32,7 @@ export async function getMeHandler(req, res, next) {
     const { data: statsData, error: statsError } = await supabase
       .from('player_stats')
       .select(
-        'total_score, rounds_done, best_distance_km, best_expert_distance_km, best_orbit_distance_km',
+        'total_score, rounds_done, best_distance_km',
       )
       .eq('player_id', req.playerId)
       .maybeSingle();
@@ -47,15 +47,8 @@ export async function getMeHandler(req, res, next) {
       statsData?.best_distance_km !== null && statsData?.best_distance_km !== undefined
         ? Number(statsData.best_distance_km)
         : null;
-    const bestExpertDistanceKm =
-      statsData?.best_expert_distance_km !== null &&
-      statsData?.best_expert_distance_km !== undefined
-        ? Number(statsData.best_expert_distance_km)
-        : null;
-    const bestOrbitDistanceKm =
-      statsData?.best_orbit_distance_km !== null && statsData?.best_orbit_distance_km !== undefined
-        ? Number(statsData.best_orbit_distance_km)
-        : null;
+    const bestExpertDistanceKm = null;
+    const bestOrbitDistanceKm = null;
 
     const { level, progress, progressMax } = calculateLevelAndProgress(totalScore);
     const badges = computeBadges(statsData);

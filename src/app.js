@@ -7,6 +7,7 @@ import configRoutes from './routes/config.js';
 import profileRoutes from './routes/profile.js';
 import meRoutes from './routes/me.js';
 import roundsRoutes from './routes/rounds.js';
+// import satelliteRoutes from './routes/satellite.js'; // removed unused import
 import issRoutes from './routes/iss.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import practiceRoutes from './routes/practice.js';

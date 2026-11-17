@@ -103,6 +103,17 @@
   color: var(--text-secondary);
 }
 
+.auth-footer a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.auth-footer a:hover {
+  text-decoration: underline;
+}
+
 /* ==========================================================================
    Tata Letak Peta & Panel Game
    ========================================================================== */

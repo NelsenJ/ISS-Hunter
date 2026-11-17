@@ -4,7 +4,7 @@
 
 import { initTheme, toggleTheme } from './theme.js';
 import { getConfig, getHealth, getMe, getActiveRound } from './api.js';
-import { initAuth, onAuthStateChange, getSession } from './auth.js';
+import { initAuth, onAuthStateChange, getSession, signOut } from './auth.js';
 import {
   subscribe,
   setConfigured,
@@ -84,40 +84,52 @@ async function start() {
       return;
     }
 
+    let isSyncing = false;
     async function syncUserSession(session) {
-      if (session?.user && session?.access_token) {
-        setAuthSession(session.user, session.access_token);
-        try {
-          const meData = await getMe(session.access_token);
-          setPlayerData(meData.player, meData.stats);
+      if (isSyncing) return;
+      isSyncing = true;
 
-          // Pulihkan ronde aktif dari server sebagai sumber kebenaran
+      try {
+        if (session?.user && session?.access_token) {
+          setAuthSession(session.user, session.access_token);
           try {
-            const activeRound = await getActiveRound(session.access_token);
-            if (activeRound) {
-              setActiveRound(activeRound);
-              const savedDraft = loadSavedDraftGuess();
-              if (savedDraft) {
-                setDraftGuess(savedDraft);
-                setGuessMarker(savedDraft);
+            const meData = await getMe(session.access_token);
+            setPlayerData(meData.player, meData.stats);
+
+            // Pulihkan ronde aktif dari server sebagai sumber kebenaran
+            try {
+              const activeRound = await getActiveRound(session.access_token);
+              if (activeRound) {
+                setActiveRound(activeRound);
+                const savedDraft = loadSavedDraftGuess();
+                if (savedDraft) {
+                  setDraftGuess(savedDraft);
+                  setGuessMarker(savedDraft);
+                }
+              } else {
+                setActiveRound(null);
+                clearDraftGuess();
+                setGuessMarker(null);
               }
-            } else {
-              setActiveRound(null);
-              clearDraftGuess();
-              setGuessMarker(null);
+            } catch (roundErr) {
+              console.warn('Gagal memulihkan status ronde aktif:', roundErr.message);
             }
-          } catch (roundErr) {
-            console.warn('Gagal memulihkan status ronde aktif:', roundErr.message);
+          } catch (err) {
+            if (err.code === 'PROFILE_REQUIRED' || err.status === 404) {
+              setProfileRequired(true);
+            } else if (err.status === 401) {
+              console.warn('Sesi telah kedaluwarsa, mengembalikan ke layar masuk.');
+              await signOut();
+              resetStore();
+            } else {
+              console.warn('Gagal menyinkronkan profil terbaru:', err.message);
+            }
           }
-        } catch (err) {
-          if (err.code === 'PROFILE_REQUIRED' || err.status === 404) {
-            setProfileRequired(true);
-          } else {
-            console.warn('Gagal menyinkronkan profil terbaru:', err.message);
-          }
+        } else {
+          resetStore();
         }
-      } else {
-        resetStore();
+      } finally {
+        isSyncing = false;
       }
     }
 

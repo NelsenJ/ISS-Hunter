@@ -19,7 +19,8 @@
     "@supabase/supabase-js": "^2.119.0",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
-    "helmet": "^8.1.0"
+    "helmet": "^8.1.0",
+    "satellite.js": "^7.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

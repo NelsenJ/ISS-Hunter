@@ -2,12 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { getSupabaseAdmin } from '../lib/supabase.js';
 import { AppError } from '../lib/errors.js';
-import {
-  validateCoordinates,
-  validateRoundId,
-  validateHorizonSeconds,
-  validateDifficulty,
-} from '../validators.js';
+import { validateCoordinates, validateRoundId } from '../validators.js';
 import { getIssPositionAtTimestamp } from '../lib/issApi.js';
 import {
   calculateHaversineDistanceKm,
@@ -15,23 +10,20 @@ import {
   calculateLevelAndProgress,
   computeBadges,
   determineNewBadges,
-  isDifficultyUnlocked,
-  isHorizonUnlocked,
-  DIFFICULTY_CONFIG,
-  HORIZON_DETAILS,
   EDUCATIONAL_FACTS,
 } from '../domain/gameLogic.js';
 
 const router = Router();
 
+// Horizon & difficulty dikunci — sesuai simplifikasi UI
+const FIXED_HORIZON = 600; // 10 menit
+const FIXED_DIFFICULTY = 'normal';
 const ROUND_EXPIRY_MS = 5 * 60 * 1000; // 5 menit
-const COOLDOWN_SECONDS = 10; // Cooldown 10 detik antar ronde selesai (anti-grinding)
+const COOLDOWN_SECONDS = 10; // Cooldown 10 detik antar ronde
 
 /**
  * POST /api/rounds
  * Memulai ronde baru atau mengembalikan ronde terbuka yang masih valid (< 5 menit).
- * Menolak pembuatan ronde baru jika masih ada ronde terbuka.
- * Mencegah race condition melalui unique index parsial Postgres (23505).
  */
 export async function createRoundHandler(req, res, next) {
   try {
@@ -50,9 +42,10 @@ export async function createRoundHandler(req, res, next) {
     }
 
     // Periksa apakah pemain memiliki ronde berstatus 'open'
+    // Kolom horizon_seconds & difficulty mungkin belum ada di DB lama — tidak di-select
     const { data: openRounds, error: fetchErr } = await supabase
       .from('rounds')
-      .select('id, target_ts, created_at, status, horizon_seconds, difficulty')
+      .select('id, target_ts, created_at, status')
       .eq('player_id', req.playerId)
       .eq('status', 'open');
 
@@ -77,46 +70,14 @@ export async function createRoundHandler(req, res, next) {
             roundId: activeRound.id,
             targetTs: activeRound.target_ts,
             startedAt: activeRound.created_at,
-            horizonSeconds: activeRound.horizon_seconds || 600,
-            difficulty: activeRound.difficulty || 'normal',
+            horizonSeconds: FIXED_HORIZON,
+            difficulty: FIXED_DIFFICULTY,
           },
         });
       }
     }
 
-    // Validasi parameter horizon dan tingkat kesulitan
-    const horizonSeconds = validateHorizonSeconds(req.body?.horizon_seconds);
-    const difficulty = validateDifficulty(req.body?.difficulty);
-
-    // Ambil statistik pemain untuk cek progresi level jika memilih fitur terkunci
-    const needProgressionCheck = difficulty !== 'normal' || horizonSeconds !== 600;
-    if (needProgressionCheck) {
-      const { data: playerStats } = await supabase
-        .from('player_stats')
-        .select('total_score')
-        .eq('player_id', req.playerId)
-        .maybeSingle();
-
-      const playerLevel = calculateLevelAndProgress(playerStats?.total_score || 0).level;
-
-      if (!isDifficultyUnlocked(difficulty, playerLevel)) {
-        const reqLevel = DIFFICULTY_CONFIG[difficulty]?.minLevel || 1;
-        throw AppError.badRequest(
-          `Tingkat kesulitan ${DIFFICULTY_CONFIG[difficulty]?.label || difficulty} terbuka di Level ${reqLevel}.`,
-          'DIFFICULTY_LOCKED',
-        );
-      }
-
-      if (!isHorizonUnlocked(horizonSeconds, playerLevel)) {
-        const reqLevel = HORIZON_DETAILS[horizonSeconds]?.minLevel || 1;
-        throw AppError.badRequest(
-          `Horizon waktu ${HORIZON_DETAILS[horizonSeconds]?.label || horizonSeconds} terbuka di Level ${reqLevel}.`,
-          'HORIZON_LOCKED',
-        );
-      }
-    }
-
-    // Cooldown 10 detik antar ronde selesai (C5 anti-grinding)
+    // Cooldown 10 detik antar ronde selesai
     const { data: lastFinished } = await supabase
       .from('rounds')
       .select('finished_at')
@@ -137,28 +98,26 @@ export async function createRoundHandler(req, res, next) {
       }
     }
 
-    // Buat ronde baru dengan horizon waktu yang dipilih
+    // Buat ronde baru — tanpa kolom horizon_seconds/difficulty yang mungkin belum ada di DB
     const nowSec = Math.floor(Date.now() / 1000);
-    const targetTs = nowSec + horizonSeconds;
+    const targetTs = nowSec + FIXED_HORIZON;
 
     const { data: inserted, error: insertErr } = await supabase
       .from('rounds')
       .insert({
         player_id: req.playerId,
         target_ts: targetTs,
-        horizon_seconds: horizonSeconds,
-        difficulty,
         status: 'open',
       })
-      .select('id, target_ts, created_at, horizon_seconds, difficulty')
+      .select('id, target_ts, created_at')
       .single();
 
     if (insertErr) {
-      // Jika terjadi tabrakan kueri bersamaan (race condition), tangkap 23505
+      // Jika terjadi race condition (unique index), ambil ronde yang sudah dibuat
       if (insertErr.code === '23505' || insertErr.message?.includes('rounds_one_open_per_player')) {
         const { data: reloaded, error: reloadErr } = await supabase
           .from('rounds')
-          .select('id, target_ts, created_at, horizon_seconds, difficulty')
+          .select('id, target_ts, created_at')
           .eq('player_id', req.playerId)
           .eq('status', 'open')
           .single();
@@ -173,8 +132,8 @@ export async function createRoundHandler(req, res, next) {
             roundId: reloaded.id,
             targetTs: reloaded.target_ts,
             startedAt: reloaded.created_at,
-            horizonSeconds: reloaded.horizon_seconds || 600,
-            difficulty: reloaded.difficulty || 'normal',
+            horizonSeconds: FIXED_HORIZON,
+            difficulty: FIXED_DIFFICULTY,
           },
         });
       }
@@ -187,8 +146,8 @@ export async function createRoundHandler(req, res, next) {
         roundId: inserted.id,
         targetTs: inserted.target_ts,
         startedAt: inserted.created_at,
-        horizonSeconds: inserted.horizon_seconds,
-        difficulty: inserted.difficulty,
+        horizonSeconds: FIXED_HORIZON,
+        difficulty: FIXED_DIFFICULTY,
       },
     });
   } catch (err) {
@@ -198,14 +157,7 @@ export async function createRoundHandler(req, res, next) {
 
 /**
  * POST /api/rounds/:id/guess
- * Mengunci tebakan pemain untuk ronde yang sedang berjalan:
- * 1. Cek kepemilikan ronde (404 jika bukan milik pemain atau tidak ada)
- * 2. Cek status (409 jika sudah berstatus done/expired)
- * 3. Cek batas waktu 5 menit (410 GONE, tandai expired jika lewat)
- * 4. Ambil posisi ISS pada waktu target dari API (502 jika gagal, ronde tetap open)
- * 5. Hitung jarak (Haversine) dan skor ronde
- * 6. Update bersyarat (where id and player_id and status='open', 409 jika 0 baris)
- * 7. Hitung total skor, level, progres, dan lencana baru
+ * Mengunci tebakan pemain untuk ronde yang sedang berjalan.
  */
 export async function submitGuessHandler(req, res, next) {
   try {
@@ -213,10 +165,10 @@ export async function submitGuessHandler(req, res, next) {
     const { lat, lng } = validateCoordinates(req.body?.lat, req.body?.lng);
     const supabase = getSupabaseAdmin();
 
-    // 1. Cek token dan kepemilikan ronde
+    // 1. Cek kepemilikan ronde — tanpa kolom opsional
     const { data: round, error: roundErr } = await supabase
       .from('rounds')
-      .select('id, player_id, status, target_ts, created_at, difficulty, horizon_seconds')
+      .select('id, player_id, status, target_ts, created_at')
       .eq('id', roundId)
       .eq('player_id', req.playerId)
       .maybeSingle();
@@ -244,17 +196,16 @@ export async function submitGuessHandler(req, res, next) {
     }
 
     // Ambil statistik pemain sebelum ronde ini di-update
+    // Hanya ambil kolom yang pasti ada di semua skema DB
     const { data: prevStatsData } = await supabase
       .from('player_stats')
-      .select(
-        'total_score, rounds_done, best_distance_km, best_expert_distance_km, best_orbit_distance_km',
-      )
+      .select('total_score, rounds_done, best_distance_km')
       .eq('player_id', req.playerId)
       .maybeSingle();
 
     const badgesBefore = computeBadges(prevStatsData || {});
 
-    // 4. Ambil jawaban dari API ISS (jika gagal lempar 502, ronde tetap open)
+    // 4. Ambil jawaban dari ISS propagator
     const issTarget = await getIssPositionAtTimestamp(round.target_ts);
     const answer = {
       lat: Number(issTarget.latitude.toFixed(4)),
@@ -265,9 +216,9 @@ export async function submitGuessHandler(req, res, next) {
     const distanceKm = Number(
       calculateHaversineDistanceKm(lat, lng, answer.lat, answer.lng).toFixed(2),
     );
-    const roundScore = calculateRoundScore(distanceKm, round.difficulty || 'normal');
+    const roundScore = calculateRoundScore(distanceKm, FIXED_DIFFICULTY);
 
-    // 6. Update bersyarat di database
+    // 6. Update ronde di database
     const { data: updatedRows, error: updateErr } = await supabase
       .from('rounds')
       .update({
@@ -297,39 +248,14 @@ export async function submitGuessHandler(req, res, next) {
       prevStatsData?.best_distance_km !== null && prevStatsData?.best_distance_km !== undefined
         ? Number(prevStatsData.best_distance_km)
         : null;
-    const prevExpertDist =
-      prevStatsData?.best_expert_distance_km !== null &&
-      prevStatsData?.best_expert_distance_km !== undefined
-        ? Number(prevStatsData.best_expert_distance_km)
-        : null;
-    const prevOrbitDist =
-      prevStatsData?.best_orbit_distance_km !== null &&
-      prevStatsData?.best_orbit_distance_km !== undefined
-        ? Number(prevStatsData.best_orbit_distance_km)
-        : null;
 
     const newTotalScore = prevTotalScore + roundScore;
     const newRoundsDone = prevRoundsDone + 1;
     const newBestDist = prevBestDist === null ? distanceKm : Math.min(prevBestDist, distanceKm);
-    const isExpert = (round.difficulty || 'normal') === 'expert';
-    const isOrbit = Number(round.horizon_seconds || 600) === 5400;
-
-    const newBestExpert = isExpert
-      ? prevExpertDist === null
-        ? distanceKm
-        : Math.min(prevExpertDist, distanceKm)
-      : prevExpertDist;
-    const newBestOrbit = isOrbit
-      ? prevOrbitDist === null
-        ? distanceKm
-        : Math.min(prevOrbitDist, distanceKm)
-      : prevOrbitDist;
 
     const badgesAfter = computeBadges({
       roundsDone: newRoundsDone,
       bestDistanceKm: newBestDist,
-      bestExpertDistanceKm: newBestExpert,
-      bestOrbitDistanceKm: newBestOrbit,
     });
     const newBadges = determineNewBadges(badgesBefore, badgesAfter);
     const { level, progress, progressMax } = calculateLevelAndProgress(newTotalScore);
@@ -357,15 +283,15 @@ export async function submitGuessHandler(req, res, next) {
 /**
  * GET /api/rounds/active
  * Mengembalikan ronde terbuka (status = 'open') milik pemain jika masih berlaku (< 5 menit).
- * Jika tidak ada atau sudah kedaluwarsa, mengembalikan data: null (dan menandai status 'expired').
  */
 export async function getActiveRoundHandler(req, res, next) {
   try {
     const supabase = getSupabaseAdmin();
 
+    // Tidak select horizon_seconds/difficulty — kolom tersebut mungkin belum ada di DB lama
     const { data: openRounds, error: fetchErr } = await supabase
       .from('rounds')
-      .select('id, target_ts, created_at, status, horizon_seconds, difficulty')
+      .select('id, target_ts, created_at, status')
       .eq('player_id', req.playerId)
       .eq('status', 'open');
 
@@ -394,8 +320,8 @@ export async function getActiveRoundHandler(req, res, next) {
         roundId: activeRound.id,
         targetTs: activeRound.target_ts,
         startedAt: activeRound.created_at,
-        horizonSeconds: activeRound.horizon_seconds || 600,
-        difficulty: activeRound.difficulty || 'normal',
+        horizonSeconds: FIXED_HORIZON,
+        difficulty: FIXED_DIFFICULTY,
       },
     });
   } catch (err) {

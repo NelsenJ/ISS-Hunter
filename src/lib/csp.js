@@ -15,7 +15,7 @@ export const CSP_DIRECTIVES = Object.freeze({
   ],
   'font-src': ["'self'", 'https://fonts.gstatic.com'],
   'img-src': ["'self'", 'data:', 'https://*.basemaps.cartocdn.com', 'https://*.cartocdn.com'],
-  'connect-src': ["'self'", 'https://*.supabase.co', 'https://api.wheretheiss.at'],
+  'connect-src': ["'self'", 'https://*.supabase.co', 'https://api.wheretheiss.at', 'https://cdn.jsdelivr.net'],
   'frame-ancestors': ["'none'"],
   'object-src': ["'none'"],
   'base-uri': ["'self'"],

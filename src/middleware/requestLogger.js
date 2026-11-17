@@ -8,9 +8,10 @@ const QUIET_PATHS = new Set(['/api/health']);
 export function requestLogger(req, res, next) {
   const startedAt = process.hrtime.bigint();
   res.on('finish', () => {
-    if (QUIET_PATHS.has(req.path)) return;
+    const cleanPath = (req.originalUrl || req.path).split('?')[0];
+    if (QUIET_PATHS.has(cleanPath)) return;
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
-    console.log(`${req.method} ${req.path} ${res.statusCode} ${durationMs.toFixed(1)}ms`);
+    console.log(`${req.method} ${cleanPath} ${res.statusCode} ${durationMs.toFixed(1)}ms`);
   });
   next();
 }
