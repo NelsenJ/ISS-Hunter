@@ -9,8 +9,10 @@
  * - Navigasi langkah (Next, Prev, Skip, Esc, Arrow Keys, Focus Trap)
  */
 
-import { setTutorialDone } from './store.js';
+import { setTutorialDone, getState } from './store.js';
 import { createIcon } from './icons.js';
+import { setBottomSheetExpanded, setActiveTab, getActiveTab } from './ui.js';
+import { centerOnIss } from './map.js';
 
 let activeOverlay = null;
 let currentStep = 0;
@@ -29,6 +31,7 @@ const TUTORIAL_STEPS = [
     iconName: 'crosshair',
     beaconText: 'Posisi ISS Live',
     fallbackSelector: '#map-container',
+    expandSheet: false, // Tutup panel agar peta terlihat luas
   },
   {
     step: 2,
@@ -38,51 +41,60 @@ const TUTORIAL_STEPS = [
     iconName: 'route',
     beaconText: 'Legenda & Jejak Orbit',
     fallbackSelector: '#map-container',
+    expandSheet: false, // Tutup panel agar legenda terlihat jelas
   },
   {
     step: 3,
     title: 'Misi Target Waktu (10–30 Menit)',
-    desc: 'Setiap ronde memiliki tantangan unik: target waktu diacak otomatis oleh server antara 10 hingga 30 menit ke depan! Tugasmu adalah memprediksi di belahan bumi mana ISS akan berada tepat saat waktu target tersebut tiba.',
-    targetSelector: '#mission-target-badge, #side-panel, #bottom-sheet',
+    desc: 'Setiap ronde memiliki tantangan unik: target waktu diacak antara 10 hingga 30 menit ke depan! Tugasmu adalah memprediksi di belahan bumi mana ISS akan berada tepat saat waktu target tiba. Panel permainan otomatis dibuka pada langkah ini.',
+    targetSelector: '#mission-target-badge, .state-box',
     iconName: 'clock',
     beaconText: 'Target Acak (10-30 Menit)',
-    fallbackSelector: '#side-panel',
+    fallbackSelector: '.state-box, .bottom-sheet-body, .side-panel-body, #bottom-sheet',
+    expandSheet: true, // Buka panel permainan
+    targetTab: 'round', // Beralih ke tab Permainan jika pemain sedang di tab lain
   },
   {
     step: 4,
     title: 'Tombol "Mulai Ronde"',
-    desc: 'Klik tombol ini untuk memulai ronde baru. Waktu countdown akan mulai berjalan dan peta langsung siap menerima titik tebakan koordinatmu.',
-    targetSelector: '#start-round-btn, #side-panel .btn-primary, #bottom-sheet .btn-primary',
+    desc: 'Ketuk tombol ini untuk memulai ronde baru. Countdown akan mulai berjalan dan peta langsung siap menerima titik tebakanmu.',
+    targetSelector: '#start-round-btn, .btn-primary',
     iconName: 'rocket',
     beaconText: 'Mulai Ronde',
-    fallbackSelector: '#side-panel',
+    fallbackSelector: '.btn-primary, #bottom-sheet',
+    expandSheet: true,
+    targetTab: 'round',
   },
   {
     step: 5,
     title: 'Cara Menaruh Tebakan di Peta',
-    desc: 'Cukup klik di titik mana saja di peta pada arah terbang ISS untuk meletakkan pin tebakanmu. Pin tebakan dapat kamu geser (drag) untuk mengatur ulang posisinya, atau tekan tombol Esc untuk membatalkan penanda.',
+    desc: 'Cukup ketuk titik mana saja di peta pada arah terbang ISS untuk meletakkan pin tebakanmu. Di HP, panel ditutup agar area peta leluasa. Pin tebakan bisa digeser, atau tekan tombol Esc untuk membatalkan.',
     targetSelector: '#map-container',
     iconName: 'map-pin',
-    beaconText: 'Klik Peta Disini',
+    beaconText: 'Ketuk Peta Disini',
     fallbackSelector: '#game-viewport',
+    expandSheet: false, // Tutup panel agar peta leluasa diklik
   },
   {
     step: 6,
     title: 'Tombol "Kunci Tebakan" & Skor',
-    desc: 'Setelah yakin dengan koordinat tebakanmu, klik tombol "Kunci Tebakan" (atau tekan Enter). Server akan mengukur jarak Haversine (km) antara tebakanmu ke posisi nyata ISS. Semakin dekat jaraknya, semakin tinggi skormu (hingga 1.000 poin)!',
-    targetSelector: '#lock-guess-btn, #side-panel, #bottom-sheet',
+    desc: 'Setelah yakin dengan tebakanmu, ketuk "Kunci Tebakan". Server mengukur jarak Haversine (km) antara tebakanmu ke posisi nyata ISS. Semakin dekat jaraknya, semakin tinggi skormu (hingga 1.000 poin)!',
+    targetSelector: '#lock-guess-btn, .state-box, .btn-primary',
     iconName: 'lock',
     beaconText: 'Kunci Tebakan',
-    fallbackSelector: '#side-panel',
+    fallbackSelector: '.state-box, .bottom-sheet-body, .side-panel-body',
+    expandSheet: true,
+    targetTab: 'round',
   },
   {
     step: 7,
     title: 'Tab Peringkat & Profil',
-    desc: 'Gunakan tab navigasi di bagian atas untuk melihat peringkatmu di Papan Peringkat (Monthly, Weekly, Daily) dan memantau riwayat ronde serta level akurasimu di tab Profil.',
+    desc: 'Gunakan tab navigasi untuk melihat peringkat di Papan Peringkat (Bulanan, Mingguan, Harian) dan memantau statistikmu di tab Profil. Di HP, tab ada di dalam panel bawah.',
     targetSelector: '#panel-tab-nav, .tabs',
     iconName: 'trophy',
     beaconText: 'Papan Peringkat & Profil',
-    fallbackSelector: '#side-panel',
+    fallbackSelector: '.tabs, #bottom-sheet',
+    expandSheet: true,
   },
 ];
 
@@ -105,6 +117,14 @@ export function closeInteractiveTutorial(markDone = true) {
 
   if (markDone) {
     setTutorialDone(true);
+  }
+
+  // Kembalikan status panel bawah ke kondisi awal di HP
+  if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+    const roundState = typeof getState === 'function' ? getState()?.roundStatus : 'idle';
+    if (roundState !== 'active' && roundState !== 'result') {
+      setBottomSheetExpanded(false);
+    }
   }
 
   if (callbacks.onComplete) {
@@ -164,6 +184,60 @@ function handleKeydown(e) {
   }
 }
 
+function resolveTarget(stepDef) {
+  if (!stepDef) return null;
+
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const panelContainer = isMobile
+    ? document.getElementById('bottom-sheet')
+    : document.getElementById('side-panel');
+
+  const tryFindVisible = (selectorStr) => {
+    if (!selectorStr) return null;
+    const parts = selectorStr.split(',').map((s) => s.trim()).filter(Boolean);
+
+    for (const selector of parts) {
+      // 1. Jika langkah terkait panel, prioritaskan cari di dalam kontainer panel aktif
+      if (stepDef.expandSheet && panelContainer) {
+        try {
+          const scopedEls = panelContainer.querySelectorAll(selector);
+          for (const el of scopedEls) {
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) return el;
+          }
+        } catch {
+          // Abaikan kesalahan querySelector
+        }
+      }
+
+      // 2. Cari di dokumen global, tapi HANYA ambil elemen yang benar-benar visible (width & height > 0)
+      try {
+        const allEls = document.querySelectorAll(selector);
+        for (const el of allEls) {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) return el;
+        }
+      } catch {
+        // Abaikan kesalahan querySelector
+      }
+    }
+    return null;
+  };
+
+  let targetEl = tryFindVisible(stepDef.targetSelector);
+  if (!targetEl && stepDef.fallbackSelector) {
+    targetEl = tryFindVisible(stepDef.fallbackSelector);
+  }
+
+  // Fallback terakhir: jika elemen panel, gunakan kontainer panel itu sendiri jika terlihat
+  if (!targetEl && stepDef.expandSheet && panelContainer) {
+    const r = panelContainer.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) return panelContainer;
+  }
+
+  return targetEl;
+}
+
 function updateOverlayAndArrow(targetEl, stepDef) {
   const spotlightBox = document.getElementById('tutorial-spotlight-box');
   const card = document.getElementById('tutorial-card');
@@ -210,27 +284,13 @@ function updateOverlayAndArrow(targetEl, stepDef) {
     spotlightBox.style.height = `${sHeight}px`;
   }
 
-  // Pointer Beacon dengan Icon Vektor SVG
-  if (beacon) {
-    beacon.style.display = 'flex';
-    if (beaconIconEl) {
-      beaconIconEl.replaceChildren(createIcon(stepDef.iconName, 14));
-    }
-    if (beaconTextEl) {
-      beaconTextEl.textContent = stepDef.beaconText || 'Fungsi Ini';
-    }
-    const bTop = Math.max(8, sTop - 34);
-    const bLeft = Math.min(window.innerWidth - 180, Math.max(10, sLeft + sWidth / 2 - 60));
-    beacon.style.top = `${bTop}px`;
-    beacon.style.left = `${bLeft}px`;
-  }
-
   // Dynamic Card & Arrow Placement
   const viewportW = window.innerWidth;
   const viewportH = window.innerHeight;
   const cardW = Math.min(390, viewportW - 24);
   const cardH = 260;
   const gap = 20;
+  let cardPlacedAbove = false;
 
   card.style.transform = 'none';
   card.style.width = `${cardW}px`;
@@ -241,17 +301,24 @@ function updateOverlayAndArrow(targetEl, stepDef) {
   }
 
   if (viewportW <= 768) {
-    // Layar ponsel/tablet kecil
-    if (targetRect.top > viewportH / 2) {
-      const cTop = Math.max(12, sTop - cardH - gap);
+    // Layar ponsel: selalu posisikan tengah secara horizontal
+    const headerH = 60;
+    card.style.left = `${(viewportW - cardW) / 2}px`;
+
+    const spaceBelow = viewportH - targetRect.bottom;
+
+    if (spaceBelow >= cardH + gap) {
+      // Ada cukup ruang di bawah target (mis. Legenda di atas, atau Tab jika card muat di bawah)
+      const cTop = Math.min(viewportH - cardH - 12, targetRect.bottom + gap);
       card.style.top = `${cTop}px`;
-      card.style.left = `${(viewportW - cardW) / 2}px`;
-      if (arrow) arrow.classList.add('arrow-bottom');
-    } else {
-      const cTop = Math.min(viewportH - cardH - 12, sTop + sHeight + gap);
-      card.style.top = `${cTop}px`;
-      card.style.left = `${(viewportW - cardW) / 2}px`;
       if (arrow) arrow.classList.add('arrow-top');
+      cardPlacedAbove = false;
+    } else {
+      // Tidak cukup ruang di bawah → tempatkan di atas target (atau dekat header)
+      const cTop = Math.max(headerH + 8, Math.min(viewportH - cardH - 12, targetRect.top - cardH - gap));
+      card.style.top = `${cTop}px`;
+      if (arrow) arrow.classList.add('arrow-bottom');
+      cardPlacedAbove = true;
     }
   } else {
     // Layar Desktop
@@ -281,6 +348,50 @@ function updateOverlayAndArrow(targetEl, stepDef) {
       card.style.top = `${Math.max(16, targetRect.top - cardH - gap)}px`;
       card.style.left = `${Math.max(16, Math.min(viewportW - cardW - 16, targetRect.left + (targetRect.width - cardW) / 2))}px`;
       if (arrow) arrow.classList.add('arrow-bottom');
+      cardPlacedAbove = true;
+    }
+  }
+
+  // Pointer Beacon dengan Icon Vektor SVG — POSISI AMAN (tidak tabrakan dengan Card!)
+  if (beacon) {
+    if (beaconIconEl) {
+      beaconIconEl.replaceChildren(createIcon(stepDef.iconName, 14));
+    }
+    if (beaconTextEl) {
+      beaconTextEl.textContent = stepDef.beaconText || 'Fungsi Ini';
+    }
+
+    const bLeft = Math.min(viewportW - 180, Math.max(10, sLeft + sWidth / 2 - 60));
+    beacon.style.left = `${bLeft}px`;
+
+    if (viewportW <= 768) {
+      if (cardPlacedAbove) {
+        // Jika Card berada di ATAS target (mis. Langkah 1 ISS Live):
+        // Taruh beacon di BAWAH target agar sama sekali tidak bertabrakan dengan Card / tombol Lanjut!
+        const bTop = sTop + sHeight + 8;
+        if (bTop + 28 <= viewportH - 8) {
+          beacon.style.top = `${bTop}px`;
+          beacon.style.display = 'flex';
+        } else {
+          // Jika di luar layar bawah, sembunyikan beacon (spotlight sudah cukup)
+          beacon.style.display = 'none';
+        }
+      } else {
+        // Jika Card berada di BAWAH target (mis. Langkah 2 Legenda):
+        // Taruh beacon di ATAS target
+        const bTop = Math.max(8, sTop - 34);
+        if (bTop >= 48) {
+          beacon.style.top = `${bTop}px`;
+          beacon.style.display = 'flex';
+        } else {
+          beacon.style.display = 'none';
+        }
+      }
+    } else {
+      // Desktop: taruh di atas target
+      const bTop = Math.max(8, sTop - 34);
+      beacon.style.top = `${bTop}px`;
+      beacon.style.display = 'flex';
     }
   }
 }
@@ -288,6 +399,26 @@ function updateOverlayAndArrow(targetEl, stepDef) {
 function goToStep(stepIndex) {
   currentStep = stepIndex;
   const stepDef = TUTORIAL_STEPS[currentStep];
+
+  // 1. Di HP, atur posisi bottom sheet DULU (sebelum render, agar render baca state yg benar)
+  //    expandSheet=true  → panel naik (steps 3,4,6,7)
+  //    expandSheet=false → panel turun (steps 1,2,5)
+  if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+    if (typeof setBottomSheetExpanded === 'function') {
+      setBottomSheetExpanded(Boolean(stepDef.expandSheet));
+    }
+  }
+
+  // 2. Jika langkah butuh tab tertentu (misal 'round'), beralih ke tab itu
+  //    setActiveTab memanggil render() → renderBottomSheet() akan baca sheetExpanded yg sudah benar
+  if (stepDef.targetTab && typeof getActiveTab === 'function' && getActiveTab() !== stepDef.targetTab) {
+    setActiveTab(stepDef.targetTab);
+  }
+
+  // 3. Pada langkah 1, arahkan peta langsung ke posisi ISS
+  if (stepDef.step === 1 && typeof centerOnIss === 'function') {
+    centerOnIss();
+  }
 
   const announce = document.getElementById('tutorial-aria-announce');
   if (announce) {
@@ -330,16 +461,53 @@ function goToStep(stepIndex) {
     }
   }
 
-  // Cari elemen target
-  let targetEl = null;
-  if (stepDef.targetSelector) {
-    targetEl = document.querySelector(stepDef.targetSelector);
-  }
-  if (!targetEl && stepDef.fallbackSelector) {
-    targetEl = document.querySelector(stepDef.fallbackSelector);
-  }
+  // Cari elemen target & posisikan overlay segera
+  updateOverlayAndArrow(resolveTarget(stepDef), stepDef);
 
-  updateOverlayAndArrow(targetEl, stepDef);
+  // Jika langkah butuh expandSheet di HP, polling transisi + timer berkala
+  if (stepDef.expandSheet) {
+    const sheet = document.getElementById('bottom-sheet');
+    let lastTop = null;
+    let stableCount = 0;
+    let frame = 0;
+    const MAX_FRAMES = 50;
+
+    const pollUntilStable = () => {
+      frame++;
+      const rect = sheet ? sheet.getBoundingClientRect() : null;
+      const currentTop = rect ? Math.round(rect.top) : null;
+
+      if (currentTop !== null && currentTop === lastTop) {
+        stableCount++;
+        if (stableCount >= 2) {
+          if (activeOverlay) updateOverlayAndArrow(resolveTarget(stepDef), stepDef);
+          return;
+        }
+      } else {
+        stableCount = 0;
+        lastTop = currentTop;
+      }
+
+      if (frame < MAX_FRAMES && activeOverlay) {
+        requestAnimationFrame(pollUntilStable);
+      } else if (activeOverlay) {
+        updateOverlayAndArrow(resolveTarget(stepDef), stepDef);
+      }
+    };
+    requestAnimationFrame(pollUntilStable);
+
+    // Timer cadangan untuk kepastian 100% setelah transisi CSS selesai
+    setTimeout(() => {
+      if (activeOverlay) updateOverlayAndArrow(resolveTarget(stepDef), stepDef);
+    }, 200);
+    setTimeout(() => {
+      if (activeOverlay) updateOverlayAndArrow(resolveTarget(stepDef), stepDef);
+    }, 400);
+  } else {
+    setTimeout(() => {
+      if (activeOverlay) updateOverlayAndArrow(resolveTarget(stepDef), stepDef);
+    }, 150);
+  }
 
   if (nextBtn) {
     nextBtn.focus();
@@ -349,6 +517,11 @@ function goToStep(stepIndex) {
 export function startInteractiveTutorial({ onComplete = null } = {}) {
   callbacks.onComplete = onComplete;
   currentStep = 0;
+
+  // Pada tampilan HP, langsung arahkan peta ke koordinat ISS
+  if (typeof window !== 'undefined' && window.innerWidth <= 768 && typeof centerOnIss === 'function') {
+    centerOnIss();
+  }
 
   if (activeOverlay) {
     activeOverlay.remove();
@@ -481,14 +654,7 @@ export function startInteractiveTutorial({ onComplete = null } = {}) {
   const handleResize = () => {
     if (!activeOverlay) return;
     const stepDef = TUTORIAL_STEPS[currentStep];
-    let targetEl = null;
-    if (stepDef.targetSelector) {
-      targetEl = document.querySelector(stepDef.targetSelector);
-    }
-    if (!targetEl && stepDef.fallbackSelector) {
-      targetEl = document.querySelector(stepDef.fallbackSelector);
-    }
-    updateOverlayAndArrow(targetEl, stepDef);
+    updateOverlayAndArrow(resolveTarget(stepDef), stepDef);
   };
 
   window.addEventListener('resize', handleResize);

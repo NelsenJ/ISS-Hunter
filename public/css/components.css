@@ -477,7 +477,16 @@
   .map-legend {
     top: var(--space-2);
     right: var(--space-2);
+    bottom: auto;
     padding: var(--space-1) var(--space-2);
+    font-size: var(--text-xs);
+  }
+}
+
+@media (max-width: 768px) {
+  /* Sembunyikan status pill ("Online") — terlalu penuh di header HP */
+  .status-pill {
+    display: none;
   }
 }
 

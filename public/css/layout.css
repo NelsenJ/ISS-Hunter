@@ -79,6 +79,18 @@
   gap: var(--space-2);
 }
 
+/* Garis pemisah vertikal: player info | tombol tema — full tinggi header */
+#theme-toggle-btn {
+  border-left: 1px solid var(--border-subtle);
+  border-top: none;
+  border-bottom: none;
+  border-right: none;
+  border-radius: 0;
+  padding-left: var(--space-3);
+  margin-left: var(--space-1);
+  align-self: stretch;
+}
+
 /* Bilah Progres Setebal 2px */
 .header-progress-bar {
   position: absolute;
@@ -194,14 +206,63 @@
   overflow-y: auto;
 }
 
-/* Panel HP: Bottom sheet dengan 2 posisi berpindah lewat tombol, bukan gestur */
+/* Panel HP: Bottom sheet dengan 2 posisi berpindah lewat tombol */
 .bottom-sheet {
   display: none;
 }
 
+/* Tombol toggle sheet — hanya tampil di mobile */
+.sheet-toggle-btn {
+  display: none;
+}
+
 @media (max-width: 768px) {
+  /* Header mobile: sembunyikan status pill dan label tema agar muat */
+  .site-header {
+    padding: 0 var(--space-3);
+    gap: var(--space-2);
+  }
+
+  /* Brand: jangan wrap, cukup logo + teks dalam satu baris */
+  .brand {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* Sembunyikan status pill ("Online") — terlalu penuh di header HP */
+  .status-pill {
+    display: none;
+  }
+
+  /* Sembunyikan separator kiri header-actions (tidak perlu di mobile) */
+  .header-actions::before {
+    display: none;
+  }
+
+  .theme-label {
+    display: none;
+  }
+
+  /* Theme toggle: kompak jadi icon-only di mobile */
+  #theme-toggle-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0 0 0 var(--space-3);
+    flex-shrink: 0;
+  }
+
   .side-panel {
     display: none;
+  }
+
+  /* Legenda peta: pojok kanan atas */
+  .map-legend {
+    top: var(--space-2);
+    right: var(--space-2);
+    bottom: auto;
+    left: auto;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-xs);
   }
 
   .bottom-sheet {
@@ -213,28 +274,65 @@
     right: 0;
     background-color: var(--surface);
     border-top: 1px solid var(--border-subtle);
-    box-shadow: var(--shadow-panel);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
     z-index: 500;
-    max-height: 80vh;
+    /* Tinggi max ketika expanded: sisakan 25% layar untuk peta */
+    max-height: 72vh;
     transition: transform var(--duration-base) var(--ease-standard);
   }
 
   .bottom-sheet[data-state='collapsed'] {
-    transform: translateY(calc(100% - 64px));
+    /* Hanya tampilkan header 56px */
+    transform: translateY(calc(100% - 56px));
   }
 
   .bottom-sheet[data-state='expanded'] {
     transform: translateY(0);
   }
 
+  /* Drag handle visual di atas sheet */
+  .bottom-sheet::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background-color: var(--border-strong);
+    border-radius: 2px;
+    margin: var(--space-2) auto 0;
+    opacity: 0.5;
+    flex-shrink: 0;
+  }
+
   .bottom-sheet-header {
-    height: 64px;
+    height: 56px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 var(--space-4);
     border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .sheet-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    padding: 0;
+  }
+
+  .sheet-toggle-btn:active {
+    background-color: var(--border-subtle);
   }
 
   .bottom-sheet .tabs {
@@ -243,9 +341,12 @@
   }
 
   .bottom-sheet-body {
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4) var(--space-4);
     overflow-y: auto;
     flex: 1;
+    /* Penting: tambahkan safe area untuk iPhone dengan home bar */
+    padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
+    -webkit-overflow-scrolling: touch;
   }
 }
 

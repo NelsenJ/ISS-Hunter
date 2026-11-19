@@ -62,6 +62,30 @@ let authMode = 'login'; // 'login' | 'register' | 'profile'
 let mapInitialized = false;
 let countdownTimer = null;
 let activeTab = 'round'; // 'round' | 'leaderboard' | 'stats'
+let sheetExpanded = false;
+let lastKnownRoundStatus = null;
+
+export function setBottomSheetExpanded(expanded) {
+  sheetExpanded = Boolean(expanded);
+  const sheet = document.getElementById('bottom-sheet');
+  if (sheet) {
+    sheet.dataset.state = sheetExpanded ? 'expanded' : 'collapsed';
+    const toggleBtn = sheet.querySelector('.sheet-toggle-btn');
+    if (toggleBtn) {
+      toggleBtn.setAttribute('aria-label', sheetExpanded ? 'Tutup panel' : 'Buka panel');
+      toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${sheetExpanded ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"></polyline></svg>`;
+    }
+  }
+}
+
+export function setActiveTab(tab) {
+  activeTab = tab;
+  render(getState());
+}
+
+export function getActiveTab() {
+  return activeTab;
+}
 
 function startCountdownTimer(startedAt) {
   if (countdownTimer) return;
@@ -166,7 +190,12 @@ function renderHeader(state) {
       try { await signOut(); } finally { resetStore(); }
     });
 
-    headerPlayerEl.append(nameEl, levelEl, logoutBtn);
+    // Garis pemisah tipis antara level dan tombol keluar
+    const sep = document.createElement('span');
+    sep.setAttribute('aria-hidden', 'true');
+    sep.style.cssText =
+      'display:inline-block;width:1px;align-self:stretch;background:var(--border-subtle);flex-shrink:0';
+    headerPlayerEl.append(nameEl, levelEl, sep, logoutBtn);
     if (headerProgressFillEl) headerProgressFillEl.style.width = `${pct}%`;
   } else {
     if (headerProgressFillEl) headerProgressFillEl.style.width = '0%';
@@ -594,51 +623,85 @@ function renderBottomSheet(viewport, state) {
     viewport.append(sheet);
   }
 
-  const expanded = state.roundStatus === 'active' || state.roundStatus === 'result';
-  sheet.dataset.state = expanded ? 'expanded' : 'collapsed';
+  // Sinkronkan status buka otomatis saat status ronde berubah (misal baru mulai ronde atau ada hasil)
+  if (lastKnownRoundStatus !== state.roundStatus) {
+    if (state.roundStatus === 'active' || state.roundStatus === 'result') {
+      sheetExpanded = true;
+    } else if (lastKnownRoundStatus === 'result' && state.roundStatus === 'idle') {
+      sheetExpanded = false;
+    }
+    lastKnownRoundStatus = state.roundStatus;
+  }
+
+  sheet.dataset.state = sheetExpanded ? 'expanded' : 'collapsed';
   sheet.replaceChildren();
 
+  // ── Header yang bisa diklik untuk toggle ──
   const sheetHeader = document.createElement('div');
   sheetHeader.className = 'bottom-sheet-header';
+  sheetHeader.setAttribute('role', 'button');
+  sheetHeader.setAttribute('aria-label', 'Buka / tutup panel');
 
   const titleWrap = document.createElement('div');
-  titleWrap.style.cssText = 'display:flex;flex-direction:column';
+  titleWrap.style.cssText = 'display:flex;flex-direction:column;flex:1;min-width:0';
 
   const titleEl = document.createElement('span');
-  titleEl.style.cssText = 'font-size:var(--text-sm);font-weight:600';
+  titleEl.style.cssText = 'font-size:var(--text-sm);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
   const subtitleEl = document.createElement('span');
-  subtitleEl.style.cssText = 'font-size:var(--text-xs);color:var(--text-secondary)';
+  subtitleEl.style.cssText = 'font-size:var(--text-xs);color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
 
   if (activeTab === 'round') {
     if (state.roundStatus === 'active') {
       titleEl.textContent = 'Ronde Berjalan';
-      subtitleEl.textContent = 'Klik peta lalu kunci tebakan';
+      subtitleEl.textContent = 'Ketuk peta • kunci tebakan';
     } else if (state.roundStatus === 'result') {
       titleEl.textContent = 'Hasil Ronde';
-      subtitleEl.textContent = 'Lihat perolehan skor dan jarak';
+      subtitleEl.textContent = 'Skor dan jarak tebakanmu';
     } else if (state.roundStatus === 'submitting') {
       titleEl.textContent = 'Menghitung Skor';
-      subtitleEl.textContent = 'Memproses tebakan di server…';
+      subtitleEl.textContent = 'Memproses…';
     } else {
       titleEl.textContent = 'ISS Hunter';
-      subtitleEl.textContent = 'Mulai ronde untuk menebak posisi ISS';
+      subtitleEl.textContent = 'Ketuk untuk mulai';
     }
   } else if (activeTab === 'leaderboard') {
     titleEl.textContent = 'Papan Peringkat';
-    subtitleEl.textContent = 'Pemain dengan skor tertinggi';
+    subtitleEl.textContent = 'Skor tertinggi';
   } else {
-    titleEl.textContent = 'Profil Pemain';
-    subtitleEl.textContent = `${state.player?.displayName || 'Pemain'} • Statistik`;
+    titleEl.textContent = 'Profil';
+    subtitleEl.textContent = state.player?.displayName || 'Pemain';
   }
 
+  // Tombol chevron toggle
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className = 'sheet-toggle-btn';
+  toggleBtn.setAttribute('aria-label', sheet.dataset.state === 'expanded' ? 'Tutup panel' : 'Buka panel');
+
+  // Chevron SVG: up ketika collapsed, down ketika expanded
+  const isExp = sheet.dataset.state === 'expanded';
+  toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${isExp ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"></polyline></svg>`;
+
+  // Toggle handler (header + tombol)
+  const handleToggle = () => {
+    sheetExpanded = sheet.dataset.state !== 'expanded';
+    sheet.dataset.state = sheetExpanded ? 'expanded' : 'collapsed';
+    // Update chevron tanpa full re-render
+    const nowExp = sheetExpanded;
+    toggleBtn.setAttribute('aria-label', nowExp ? 'Tutup panel' : 'Buka panel');
+    toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${nowExp ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"></polyline></svg>`;
+  };
+  sheetHeader.addEventListener('click', handleToggle);
+
   titleWrap.append(titleEl, subtitleEl);
-  sheetHeader.append(titleWrap);
+  sheetHeader.append(titleWrap, toggleBtn);
 
   const sheetBody = document.createElement('div');
   sheetBody.className = 'bottom-sheet-body';
 
   const tabNav = createTabNavigation(activeTab, (newTab) => {
     activeTab = newTab;
+    sheetExpanded = true;
     render(getState());
   });
 

@@ -4,6 +4,8 @@
  * dan sinkron dengan preferensi sistem.
  */
 
+import { createIcon } from './icons.js';
+
 const THEME_STORAGE_KEY = 'iss_theme';
 
 export function getPreferredTheme() {
@@ -24,6 +26,15 @@ export function applyTheme(theme) {
       isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap',
     );
     themeToggleBtn.setAttribute('title', isDark ? 'Mode terang' : 'Mode gelap');
+
+    // Update icon (sun = terang, moon = gelap saat ini → klik ke terang)
+    const iconWrap = themeToggleBtn.querySelector('.theme-icon');
+    if (iconWrap) {
+      const newIcon = createIcon(isDark ? 'sun' : 'moon', 18);
+      newIcon.className = `icon-wrap theme-icon`;
+      iconWrap.replaceWith(newIcon);
+    }
+
     const labelEl = themeToggleBtn.querySelector('.theme-label');
     if (labelEl) {
       labelEl.textContent = isDark ? 'Terang' : 'Gelap';
@@ -33,6 +44,16 @@ export function applyTheme(theme) {
 
 export function initTheme() {
   const theme = getPreferredTheme();
+
+  // Inject icon ke button sebelum applyTheme dipanggil
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  if (themeToggleBtn && !themeToggleBtn.querySelector('.theme-icon')) {
+    const isDark = theme === 'dark';
+    const icon = createIcon(isDark ? 'sun' : 'moon', 18);
+    icon.className = `icon-wrap theme-icon`;
+    themeToggleBtn.prepend(icon);
+  }
+
   applyTheme(theme);
 
   // Pantau jika sistem operasi mengubah preferensi tema saat aplikasi terbuka

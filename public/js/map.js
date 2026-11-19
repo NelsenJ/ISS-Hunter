@@ -221,8 +221,9 @@ export function initMap(containerEl, currentTheme = 'light', onMapClick = null) 
     worldCopyJump: true,
   }).setView([0, 0], 2);
 
-  // Pasang kontrol zoom di sudut kanan bawah agar tidak tertutup panel desktop
-  window.L.control.zoom({ position: 'bottomright' }).addTo(mapInstance);
+  // Pasang kontrol zoom: kiri atas di mobile, kanan bawah di desktop
+  const isMobile = window.innerWidth <= 768;
+  window.L.control.zoom({ position: isMobile ? 'topleft' : 'bottomright' }).addTo(mapInstance);
 
   const tileUrl = currentTheme === 'dark' ? CARTO_DARK : CARTO_LIGHT;
   tileLayer = window.L.tileLayer(tileUrl, {
@@ -265,6 +266,34 @@ export function setMapTheme(theme) {
   tileLayer.setUrl(targetUrl);
 }
 
+let hasAutoCenteredMobile = false;
+
+/**
+ * Mengarahkan pandangan peta langsung ke koordinat terkini ISS.
+ *
+ * @param {number|null} [zoom=null]
+ * @returns {boolean}
+ */
+export function centerOnIss(zoom = null) {
+  if (!mapInstance || !latestIssPos) return false;
+  const targetZoom =
+    zoom !== null ? zoom : typeof mapInstance.getZoom === 'function' ? mapInstance.getZoom() : 2;
+  if (typeof mapInstance.setView === 'function') {
+    mapInstance.setView([latestIssPos.lat, latestIssPos.lng], targetZoom, { animate: true });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Mengembalikan koordinat terakhir ISS yang tersimpan di memori.
+ *
+ * @returns {{ lat: number, lng: number } | null}
+ */
+export function getLatestIssPosition() {
+  return latestIssPos;
+}
+
 /**
  * Memperbarui posisi penanda ISS di peta dengan indikator arah rotasi orbit.
  *
@@ -273,12 +302,21 @@ export function setMapTheme(theme) {
 export function updateIssPosition(pos) {
   if (!mapInstance) return;
 
+  const isFirstPos = !latestIssPos;
   if (latestIssPos && (latestIssPos.lat !== pos.lat || latestIssPos.lng !== pos.lng)) {
     lastKnownBearing = calculateBearing(latestIssPos.lat, latestIssPos.lng, pos.lat, pos.lng);
   }
   latestIssPos = pos;
 
   const latlng = [pos.lat, pos.lng];
+
+  // Pada tampilan HP, saat koordinat ISS pertama kali didapatkan, langsung arahkan layar ke ISS
+  if (isFirstPos && !hasAutoCenteredMobile && typeof window !== 'undefined' && window.innerWidth <= 768) {
+    hasAutoCenteredMobile = true;
+    if (typeof mapInstance.setView === 'function') {
+      mapInstance.setView(latlng, typeof mapInstance.getZoom === 'function' ? mapInstance.getZoom() : 2);
+    }
+  }
 
   if (!issMarker) {
     issMarker = window.L.marker(latlng, {
@@ -548,6 +586,7 @@ export function destroyMap() {
     practiceLayer = null;
     latestIssPos = null;
     lastTrailPoints = [];
+    hasAutoCenteredMobile = false;
   }
 }
 
