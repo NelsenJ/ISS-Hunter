@@ -159,17 +159,17 @@ export function validateDifficulty(val) {
 }
 
 /**
- * Validasi jenis papan peringkat (total, average, today).
+ * Validasi jenis papan peringkat (monthly, weekly, daily).
  *
  * @param {unknown} val
- * @returns {'total' | 'average' | 'today'}
+ * @returns {'monthly' | 'weekly' | 'daily'}
  */
 export function validateLeaderboardType(val) {
   if (val === undefined || val === null || val === '') {
-    return 'total';
+    return 'monthly';
   }
   const str = String(val).trim().toLowerCase();
-  const allowed = ['total', 'average', 'today'];
+  const allowed = ['monthly', 'weekly', 'daily'];
   if (!allowed.includes(str)) {
     throw AppError.badRequest(
       `Jenis papan peringkat tidak valid. Pilihan: ${allowed.join(', ')}.`,

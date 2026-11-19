@@ -183,13 +183,17 @@ export async function getIssPositionNow() {
 }
 
 /**
- * Jejak lintasan ISS (10 titik dihitung parallel via satrec lokal, < 2ms)
+ * Jejak lintasan ISS (dihitung parallel via satrec lokal, < 2ms)
  * @param {number} horizonSeconds
  */
 export async function getIssTrail(horizonSeconds = 600) {
   const nowMs = Date.now();
-  const intervalMs = Math.max(1000, Math.floor((horizonSeconds * 1000) / 10));
-  const timestamps = Array.from({ length: 10 }, (_, i) => nowMs - (9 - i) * intervalMs);
+  const numPoints = horizonSeconds > 1800 ? 15 : 10;
+  const intervalMs = Math.max(1000, Math.floor((horizonSeconds * 1000) / (numPoints - 1)));
+  const timestamps = Array.from(
+    { length: numPoints },
+    (_, i) => nowMs - (numPoints - 1 - i) * intervalMs,
+  );
   return Promise.all(timestamps.map((ts) => computePosition(ts)));
 }
 

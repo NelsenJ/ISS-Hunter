@@ -36,8 +36,13 @@ alter table rounds add column if not exists difficulty text not null default 'no
 
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'rounds_horizon_check') then
-    alter table rounds add constraint rounds_horizon_check check (horizon_seconds in (120, 600, 1800, 5400));
+  -- Hapus constraint horizon lama yang membatasi nilai tertentu saja
+  if exists (select 1 from pg_constraint where conname = 'rounds_horizon_check') then
+    alter table rounds drop constraint rounds_horizon_check;
+  end if;
+  -- Buat constraint baru: 10 menit (600 dtk) s.d. 90 menit (5400 dtk)
+  if not exists (select 1 from pg_constraint where conname = 'rounds_horizon_range_check') then
+    alter table rounds add constraint rounds_horizon_range_check check (horizon_seconds >= 600 and horizon_seconds <= 5400);
   end if;
   if not exists (select 1 from pg_constraint where conname = 'rounds_difficulty_check') then
     alter table rounds add constraint rounds_difficulty_check check (difficulty in ('easy', 'normal', 'hard', 'expert'));
@@ -73,17 +78,36 @@ join profiles p on p.id = s.player_id
 order by s.total_score desc
 limit 20;
 
-/* Papan peringkat: Rata-rata Skor (minimal 5 ronde untuk mencegah grinding semu) */
-create or replace view leaderboard_average with (security_invoker = true) as
-select p.display_name, s.avg_score, s.rounds_done, s.best_distance_km, s.total_score
-from player_stats s
-join profiles p on p.id = s.player_id
-where s.rounds_done >= 5
-order by s.avg_score desc, s.rounds_done desc
+/* Papan peringkat: Bulanan (Monthly) */
+create or replace view leaderboard_monthly with (security_invoker = true) as
+select p.display_name,
+       coalesce(sum(r.score), 0) as total_score,
+       count(r.id) as rounds_done,
+       min(r.distance_km) as best_distance_km
+from rounds r
+join profiles p on p.id = r.player_id
+where r.status = 'done'
+  and r.created_at >= date_trunc('month', now())
+group by p.id, p.display_name
+order by total_score desc
 limit 20;
 
-/* Papan peringkat: Hari Ini */
-create or replace view leaderboard_today with (security_invoker = true) as
+/* Papan peringkat: Mingguan (Weekly) */
+create or replace view leaderboard_weekly with (security_invoker = true) as
+select p.display_name,
+       coalesce(sum(r.score), 0) as total_score,
+       count(r.id) as rounds_done,
+       min(r.distance_km) as best_distance_km
+from rounds r
+join profiles p on p.id = r.player_id
+where r.status = 'done'
+  and r.created_at >= date_trunc('week', now())
+group by p.id, p.display_name
+order by total_score desc
+limit 20;
+
+/* Papan peringkat: Harian (Daily) */
+create or replace view leaderboard_daily with (security_invoker = true) as
 select p.display_name,
        coalesce(sum(r.score), 0) as total_score,
        count(r.id) as rounds_done,

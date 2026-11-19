@@ -239,7 +239,6 @@ export function initMap(containerEl, currentTheme = 'light', onMapClick = null) 
   mapInstance.on('click', (e) => {
     const rawLat = e.latlng.lat;
     const rawLng = e.latlng.lng;
-    const normLng = normalizeLng(rawLng);
 
     // Batasi lat ke rentang sah -90..90
     const clampedLat = Math.max(-90, Math.min(90, rawLat));
@@ -247,7 +246,7 @@ export function initMap(containerEl, currentTheme = 'light', onMapClick = null) 
     if (onMapClickCallback) {
       onMapClickCallback({
         lat: Number(clampedLat.toFixed(4)),
-        lng: Number(normLng.toFixed(4)),
+        lng: Number(rawLng.toFixed(4)),
       });
     }
   });
@@ -374,7 +373,19 @@ export function setGuessMarker(coords) {
     guessMarker = window.L.marker(latlng, {
       icon: createGuessIcon(),
       zIndexOffset: 800,
+      draggable: true,
     }).addTo(mapInstance);
+
+    guessMarker.on('dragend', (e) => {
+      const pos = e.target.getLatLng();
+      const clampedLat = Math.max(-90, Math.min(90, pos.lat));
+      if (onMapClickCallback) {
+        onMapClickCallback({
+          lat: Number(clampedLat.toFixed(4)),
+          lng: Number(pos.lng.toFixed(4)),
+        });
+      }
+    });
   } else {
     guessMarker.setLatLng(latlng);
   }

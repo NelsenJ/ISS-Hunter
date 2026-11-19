@@ -205,40 +205,36 @@ test('POST /api/rounds/:id/guess mengembalikan 502 jika API ISS gagal dan ronde 
       if (table === 'rounds') {
         return {
           select() {
-            return {
+            const chain = {
               eq() {
-                return {
-                  eq() {
-                    return {
-                      async maybeSingle() {
-                        return {
-                          data: {
-                            id: 10,
-                            player_id: 'usr-123',
-                            status: 'open',
-                            created_at: validCreatedAt,
-                            target_ts: 1700000000,
-                          },
-                          error: null,
-                        };
-                      },
-                    };
-                  },
-                };
+                return chain;
               },
+              gt() {
+                return chain;
+              },
+              limit: async () => ({ data: [], error: null }),
+              maybeSingle: async () => ({
+                data: {
+                  id: 10,
+                  player_id: 'usr-123',
+                  status: 'open',
+                  created_at: validCreatedAt,
+                  target_ts: NaN,
+                },
+                error: null,
+              }),
             };
+            return chain;
           },
           update() {
             roundClosed = true;
-            return {
+            const chain = {
               eq() {
-                return {
-                  async eq() {
-                    return { error: null };
-                  },
-                };
+                return chain;
               },
+              select: () => ({ data: [{ id: 10, status: 'done' }], error: null }),
             };
+            return chain;
           },
         };
       }
@@ -294,51 +290,36 @@ test('POST /api/rounds/:id/guess berhasil mengunci tebakan, menghitung jarak dan
       if (table === 'rounds') {
         return {
           select() {
-            return {
+            const chain = {
               eq() {
-                return {
-                  eq() {
-                    return {
-                      async maybeSingle() {
-                        return {
-                          data: {
-                            id: 15,
-                            player_id: 'usr-456',
-                            status: 'open',
-                            created_at: validCreatedAt,
-                            target_ts: 1700000600,
-                          },
-                          error: null,
-                        };
-                      },
-                    };
-                  },
-                };
+                return chain;
               },
+              gt() {
+                return chain;
+              },
+              limit: async () => ({ data: [], error: null }),
+              maybeSingle: async () => ({
+                data: {
+                  id: 15,
+                  player_id: 'usr-456',
+                  status: 'open',
+                  created_at: validCreatedAt,
+                  target_ts: 1700000600,
+                },
+                error: null,
+              }),
             };
+            return chain;
           },
           update(fields) {
             updatedFields = fields;
-            return {
+            const chain = {
               eq() {
-                return {
-                  eq() {
-                    return {
-                      eq() {
-                        return {
-                          select() {
-                            return {
-                              data: [{ id: 15, status: 'done' }],
-                              error: null,
-                            };
-                          },
-                        };
-                      },
-                    };
-                  },
-                };
+                return chain;
               },
+              select: () => ({ data: [{ id: 15, status: 'done' }], error: null }),
             };
+            return chain;
           },
         };
       }
@@ -386,7 +367,7 @@ test('POST /api/rounds/:id/guess berhasil mengunci tebakan, menghitung jarak dan
   const req = {
     params: { id: '15' },
     playerId: 'usr-456',
-    body: { lat: -6.2, lng: 106.8 }, // Tebakan tepat di titik yang sama (jarak 0 km)
+    body: { lat: 1.2151, lng: -30.2475 }, // Tebakan tepat di titik ISS (jarak 0 km)
   };
   const res = createMockResponse();
 
@@ -418,7 +399,7 @@ test('GET /api/leaderboard mengembalikan 20 pemain teratas dan header Cache-Cont
 
   const mockSupabase = {
     from(table) {
-      assert.equal(table, 'leaderboard');
+      assert.equal(table, 'leaderboard_monthly');
       return {
         select() {
           return {
@@ -452,50 +433,14 @@ test('GET /api/leaderboard mengembalikan 20 pemain teratas dan header Cache-Cont
   assert.equal(res.body.data[1].displayName, 'JuaraDua');
 });
 
-test('GET /api/leaderboard?type=average mengkueri view leaderboard_average dan mengurutkan avg_score', async () => {
+test('GET /api/leaderboard?type=weekly mengkueri view leaderboard_weekly', async () => {
   const mockRows = [
-    { display_name: 'PakarOrbit', avg_score: 950.5, rounds_done: 8, best_distance_km: 25.0 },
+    { display_name: 'PakarOrbit', total_score: 5500, rounds_done: 8, best_distance_km: 25.0 },
   ];
 
   const mockSupabase = {
     from(table) {
-      assert.equal(table, 'leaderboard_average');
-      return {
-        select() {
-          return {
-            order(col) {
-              assert.equal(col, 'avg_score');
-              return {
-                limit() {
-                  return { data: mockRows, error: null };
-                },
-              };
-            },
-          };
-        },
-      };
-    },
-  };
-  setSupabaseClient(mockSupabase);
-
-  const req = { query: { type: 'average' } };
-  const res = createMockResponse();
-  await leaderboardHandler(req, res, () => {});
-
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.body.ok, true);
-  assert.equal(res.body.data.length, 1);
-  assert.equal(res.body.data[0].avgScore, 950.5);
-});
-
-test('GET /api/leaderboard?type=today mengkueri view leaderboard_today', async () => {
-  const mockRows = [
-    { display_name: 'HariIniJuara', total_score: 3000, rounds_done: 4, best_distance_km: 50.0 },
-  ];
-
-  const mockSupabase = {
-    from(table) {
-      assert.equal(table, 'leaderboard_today');
+      assert.equal(table, 'leaderboard_weekly');
       return {
         select() {
           return {
@@ -514,7 +459,43 @@ test('GET /api/leaderboard?type=today mengkueri view leaderboard_today', async (
   };
   setSupabaseClient(mockSupabase);
 
-  const req = { query: { type: 'today' } };
+  const req = { query: { type: 'weekly' } };
+  const res = createMockResponse();
+  await leaderboardHandler(req, res, () => {});
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.data.length, 1);
+  assert.equal(res.body.data[0].totalScore, 5500);
+});
+
+test('GET /api/leaderboard?type=daily mengkueri view leaderboard_daily', async () => {
+  const mockRows = [
+    { display_name: 'HariIniJuara', total_score: 3000, rounds_done: 4, best_distance_km: 50.0 },
+  ];
+
+  const mockSupabase = {
+    from(table) {
+      assert.equal(table, 'leaderboard_daily');
+      return {
+        select() {
+          return {
+            order(col) {
+              assert.equal(col, 'total_score');
+              return {
+                limit() {
+                  return { data: mockRows, error: null };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  setSupabaseClient(mockSupabase);
+
+  const req = { query: { type: 'daily' } };
   const res = createMockResponse();
   await leaderboardHandler(req, res, () => {});
 

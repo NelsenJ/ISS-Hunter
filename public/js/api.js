@@ -71,10 +71,10 @@ export const getActiveRound = (token) =>
     token,
   });
 
-export const startRound = (token, { horizon_seconds = 600, difficulty = 'normal' } = {}) =>
+export const startRound = (token, { difficulty = 'normal' } = {}) =>
   apiRequest('/api/rounds', {
     method: 'POST',
-    body: { horizon_seconds, difficulty },
+    body: { difficulty },
     token,
   });
 

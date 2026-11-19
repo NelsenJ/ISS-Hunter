@@ -8,7 +8,7 @@ import { initAuth, onAuthStateChange, getSession, signOut } from './auth.js';
 import {
   subscribe,
   setConfigured,
-  setAuthSession,
+  setAuthSessionWithPlayer,
   setPlayerData,
   setProfileRequired,
   loadProfileCache,
@@ -91,10 +91,9 @@ async function start() {
 
       try {
         if (session?.user && session?.access_token) {
-          setAuthSession(session.user, session.access_token);
           try {
             const meData = await getMe(session.access_token);
-            setPlayerData(meData.player, meData.stats);
+            setAuthSessionWithPlayer(session.user, session.access_token, meData.player, meData.stats);
 
             // Pulihkan ronde aktif dari server sebagai sumber kebenaran
             try {

@@ -337,6 +337,29 @@ test('GET /api/me mengembalikan profil, level, progress, dan status badges denga
           },
         };
       }
+      if (table === 'rounds') {
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  eq() {
+                    return {
+                      gt() {
+                        return {
+                          async limit() {
+                            return { data: [], error: null };
+                          },
+                        };
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
       throw new Error(`Unexpected table: ${table}`);
     },
   };

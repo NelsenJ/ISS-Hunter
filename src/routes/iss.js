@@ -18,7 +18,7 @@ export async function issNowHandler(_req, res, next) {
 export async function issTrailHandler(req, res, next) {
   try {
     const rawHorizon = req.query?.horizon ? Number(req.query.horizon) : 600;
-    const horizon = [120, 600, 1800, 5400].includes(rawHorizon) ? rawHorizon : 600;
+    const horizon = Number.isFinite(rawHorizon) ? Math.max(120, Math.min(5400, rawHorizon)) : 600;
     const data = await getIssTrail(horizon);
     res.setHeader('Cache-Control', PROXY_CACHE_HEADER);
     return res.json({ ok: true, data });

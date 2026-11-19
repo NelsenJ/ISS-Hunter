@@ -92,20 +92,34 @@ test('computeBadges memeriksa batas syarat lencana Pemula, Navigator, Sniper, Or
   // Belum ada ronde
   assert.deepEqual(computeBadges(0, null), {
     pemula: false,
+    hunter: false,
     navigator: false,
     sniper: false,
     orbitPenuh: false,
     tanpaJejak: false,
+    skillIssue: false,
   });
 
-  // 1 ronde selesai tapi jarak jauh (> 500 km) -> hanya Pemula
+  // 1 ronde selesai tapi jarak jauh (> 1000 km dan < 2000 km) -> hanya Pemula
   assert.deepEqual(computeBadges(1, 1200), {
     pemula: true,
+    hunter: false,
     navigator: false,
     sniper: false,
     orbitPenuh: false,
     tanpaJejak: false,
+    skillIssue: false,
   });
+
+  // Kasus lencana Hunter: syarat < 1000 km
+  assert.equal(computeBadges(1, 1000).hunter, false);
+  assert.equal(computeBadges(1, 999.9).hunter, true);
+  assert.equal(computeBadges(1, 800).hunter, true);
+
+  // Kasus lencana Skill Issue: syarat > 2000 km
+  assert.equal(computeBadges({ roundsDone: 1, worstDistanceKm: 2000 }).skillIssue, false);
+  assert.equal(computeBadges({ roundsDone: 1, worstDistanceKm: 2001 }).skillIssue, true);
+  assert.equal(computeBadges({ roundsDone: 1, hasSkillIssue: true }).skillIssue, true);
 
   // Kasus batas Navigator: syarat < 500 km
   assert.equal(computeBadges(1, 500).navigator, false); // tepat 500 km belum dapat
@@ -150,6 +164,10 @@ test('determineNewBadges mendeteksi lencana yang baru diperoleh dengan tepat', (
   const before4 = { orbitPenuh: false, tanpaJejak: false };
   const after4 = { orbitPenuh: true, tanpaJejak: true };
   assert.deepEqual(determineNewBadges(before4, after4), ['orbitPenuh', 'tanpaJejak']);
+
+  const before5 = { hunter: false, skillIssue: false };
+  const after5 = { hunter: true, skillIssue: true };
+  assert.deepEqual(determineNewBadges(before5, after5), ['hunter', 'skillIssue']);
 });
 
 test('isDifficultyUnlocked dan isHorizonUnlocked memeriksa pembukaan fitur berdasarkan level', () => {

@@ -15,8 +15,7 @@ import {
 
 const router = Router();
 
-// Horizon & difficulty dikunci — sesuai simplifikasi UI
-const FIXED_HORIZON = 600; // 10 menit
+// Konfigurasi ronde
 const FIXED_DIFFICULTY = 'normal';
 const ROUND_EXPIRY_MS = 5 * 60 * 1000; // 5 menit
 const COOLDOWN_SECONDS = 10; // Cooldown 10 detik antar ronde
@@ -42,7 +41,6 @@ export async function createRoundHandler(req, res, next) {
     }
 
     // Periksa apakah pemain memiliki ronde berstatus 'open'
-    // Kolom horizon_seconds & difficulty mungkin belum ada di DB lama — tidak di-select
     const { data: openRounds, error: fetchErr } = await supabase
       .from('rounds')
       .select('id, target_ts, created_at, status')
@@ -64,13 +62,18 @@ export async function createRoundHandler(req, res, next) {
           .eq('player_id', req.playerId);
       } else {
         // Ronde terbuka masih valid, kembalikan ronde yang sama
+        // Hitung horizon dari target_ts - created_at (tidak perlu kolom horizon_seconds)
+        const roundHorizon = Math.max(
+          600,
+          Math.min(1800, Math.round(Number(activeRound.target_ts) - new Date(activeRound.created_at).getTime() / 1000)),
+        );
         return res.json({
           ok: true,
           data: {
             roundId: activeRound.id,
             targetTs: activeRound.target_ts,
             startedAt: activeRound.created_at,
-            horizonSeconds: FIXED_HORIZON,
+            horizonSeconds: roundHorizon,
             difficulty: FIXED_DIFFICULTY,
           },
         });
@@ -98,9 +101,17 @@ export async function createRoundHandler(req, res, next) {
       }
     }
 
-    // Buat ronde baru — tanpa kolom horizon_seconds/difficulty yang mungkin belum ada di DB
+    // Buat ronde baru — langsung acak dalam rentang 10 - 30 menit (kelipatan 5 menit)
+    const RANDOM_MINUTES = [10, 15, 20, 25, 30];
+    let horizon = req.body?.horizon_seconds ? Number(req.body.horizon_seconds) : null;
+
+    if (!horizon || !Number.isFinite(horizon) || horizon < 600 || horizon > 1800) {
+      const randomMin = RANDOM_MINUTES[Math.floor(Math.random() * RANDOM_MINUTES.length)];
+      horizon = randomMin * 60;
+    }
+
     const nowSec = Math.floor(Date.now() / 1000);
-    const targetTs = nowSec + FIXED_HORIZON;
+    const targetTs = nowSec + horizon;
 
     const { data: inserted, error: insertErr } = await supabase
       .from('rounds')
@@ -126,13 +137,19 @@ export async function createRoundHandler(req, res, next) {
           throw insertErr;
         }
 
+        // Hitung horizon dari target_ts - created_at (akurat karena target_ts = nowSec + horizon)
+        const roundHorizon = Math.max(
+          600,
+          Math.min(1800, Math.round(Number(reloaded.target_ts) - new Date(reloaded.created_at).getTime() / 1000)),
+        );
+
         return res.json({
           ok: true,
           data: {
             roundId: reloaded.id,
             targetTs: reloaded.target_ts,
             startedAt: reloaded.created_at,
-            horizonSeconds: FIXED_HORIZON,
+            horizonSeconds: roundHorizon,
             difficulty: FIXED_DIFFICULTY,
           },
         });
@@ -146,7 +163,7 @@ export async function createRoundHandler(req, res, next) {
         roundId: inserted.id,
         targetTs: inserted.target_ts,
         startedAt: inserted.created_at,
-        horizonSeconds: FIXED_HORIZON,
+        horizonSeconds: horizon,
         difficulty: FIXED_DIFFICULTY,
       },
     });
@@ -203,10 +220,34 @@ export async function submitGuessHandler(req, res, next) {
       .eq('player_id', req.playerId)
       .maybeSingle();
 
-    const badgesBefore = computeBadges(prevStatsData || {});
+    // Cek apakah pemain sebelum ronde ini sudah pernah punya tebakan > 2000 km
+    const { data: prevFarRound } = await supabase
+      .from('rounds')
+      .select('id')
+      .eq('player_id', req.playerId)
+      .eq('status', 'done')
+      .gt('distance_km', 2000)
+      .limit(1);
+
+    const prevHasSkillIssue = Boolean(prevFarRound && prevFarRound.length > 0);
+    const badgesBefore = computeBadges({
+      ...prevStatsData,
+      hasSkillIssue: prevHasSkillIssue,
+    });
 
     // 4. Ambil jawaban dari ISS propagator
-    const issTarget = await getIssPositionAtTimestamp(round.target_ts);
+    let issTarget;
+    try {
+      issTarget = await getIssPositionAtTimestamp(round.target_ts);
+      if (!issTarget || !Number.isFinite(issTarget.latitude) || !Number.isFinite(issTarget.longitude)) {
+        throw new Error('Posisi ISS tidak valid');
+      }
+    } catch {
+      throw AppError.badGateway(
+        'Gagal mendapatkan posisi ISS dari API.',
+        'UPSTREAM_ERROR',
+      );
+    }
     const answer = {
       lat: Number(issTarget.latitude.toFixed(4)),
       lng: Number(issTarget.longitude.toFixed(4)),
@@ -252,10 +293,12 @@ export async function submitGuessHandler(req, res, next) {
     const newTotalScore = prevTotalScore + roundScore;
     const newRoundsDone = prevRoundsDone + 1;
     const newBestDist = prevBestDist === null ? distanceKm : Math.min(prevBestDist, distanceKm);
+    const newHasSkillIssue = prevHasSkillIssue || distanceKm > 2000;
 
     const badgesAfter = computeBadges({
       roundsDone: newRoundsDone,
       bestDistanceKm: newBestDist,
+      hasSkillIssue: newHasSkillIssue,
     });
     const newBadges = determineNewBadges(badgesBefore, badgesAfter);
     const { level, progress, progressMax } = calculateLevelAndProgress(newTotalScore);
@@ -288,7 +331,7 @@ export async function getActiveRoundHandler(req, res, next) {
   try {
     const supabase = getSupabaseAdmin();
 
-    // Tidak select horizon_seconds/difficulty — kolom tersebut mungkin belum ada di DB lama
+    // Baca horizon_seconds dari kolom DB agar selalu akurat
     const { data: openRounds, error: fetchErr } = await supabase
       .from('rounds')
       .select('id, target_ts, created_at, status')
@@ -314,13 +357,19 @@ export async function getActiveRoundHandler(req, res, next) {
       return res.json({ ok: true, data: null });
     }
 
+    // Hitung horizon dari target_ts - created_at (tidak perlu kolom horizon_seconds)
+    const roundHorizon = Math.max(
+      600,
+      Math.min(1800, Math.round(Number(activeRound.target_ts) - new Date(activeRound.created_at).getTime() / 1000)),
+    );
+
     return res.json({
       ok: true,
       data: {
         roundId: activeRound.id,
         targetTs: activeRound.target_ts,
         startedAt: activeRound.created_at,
-        horizonSeconds: FIXED_HORIZON,
+        horizonSeconds: roundHorizon,
         difficulty: FIXED_DIFFICULTY,
       },
     });

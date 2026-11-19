@@ -11,18 +11,19 @@ const TUTORIAL_DONE_KEY = 'iss_tutorial_done';
 const PREF_HORIZON_KEY = 'iss_pref_horizon';
 const PREF_DIFF_KEY = 'iss_pref_diff';
 
-function getStoredNumber(key, fallback) {
+function getStoredString(key, fallback) {
   try {
-    const val = localStorage.getItem(key);
-    return val ? Number(val) : fallback;
+    return localStorage.getItem(key) || fallback;
   } catch {
     return fallback;
   }
 }
 
-function getStoredString(key, fallback) {
+function getStoredBoolean(key, fallback = false) {
   try {
-    return localStorage.getItem(key) || fallback;
+    const val = localStorage.getItem(key);
+    if (val === null) return fallback;
+    return val === '1' || val === 'true';
   } catch {
     return fallback;
   }
@@ -42,12 +43,12 @@ const state = {
   roundResult: null,
   roundError: null,
   leaderboard: null,
-  leaderboardType: 'total', // 'total' | 'average' | 'today'
-  preferredHorizon: getStoredNumber(PREF_HORIZON_KEY, 600),
+  leaderboardType: 'monthly', // 'monthly' | 'weekly' | 'daily'
+  preferredHorizon: getStoredString(PREF_HORIZON_KEY, 'random'),
   preferredDifficulty: getStoredString(PREF_DIFF_KEY, 'normal'),
   isPractice: false,
   practiceResult: null,
-  tutorialDone: false,
+  tutorialDone: getStoredBoolean(TUTORIAL_DONE_KEY, false),
   preferredSatellite: getStoredString('iss_pref_satellite', 'iss'),
 };
 
@@ -80,6 +81,26 @@ export function setConfigured(configured) {
 export function setAuthSession(user, token) {
   state.user = user;
   state.token = token;
+  notify();
+}
+
+export function setAuthSessionWithPlayer(user, token, player, stats) {
+  state.user = user;
+  state.token = token;
+  state.player = player;
+  state.stats = stats;
+  state.profileRequired = false;
+
+  if (player) {
+    try {
+      localStorage.setItem(
+        PROFILE_CACHE_KEY,
+        JSON.stringify({ player, stats, cachedAt: Date.now() }),
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }
   notify();
 }
 
@@ -271,7 +292,7 @@ export function setPracticeResult(result) {
 }
 
 export function setPreferredHorizon(horizon) {
-  const val = Number(horizon) || 600;
+  const val = horizon === 'random' ? 'random' : (Number(horizon) || 600);
   state.preferredHorizon = val;
   try {
     localStorage.setItem(PREF_HORIZON_KEY, String(val));
@@ -288,7 +309,7 @@ export function setPreferredDifficulty(diff) {
 }
 
 export function setLeaderboardType(type) {
-  state.leaderboardType = type || 'total';
+  state.leaderboardType = type || 'monthly';
   notify();
 }
 

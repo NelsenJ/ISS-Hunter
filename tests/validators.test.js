@@ -136,9 +136,9 @@ test('validateDifficulty menerima tingkat kesulitan sah dan memberikan nilai baw
 });
 
 test('validateLeaderboardType menerima tipe sah dan memberikan nilai bawaan', () => {
-  assert.equal(validateLeaderboardType(undefined), 'total');
-  assert.equal(validateLeaderboardType('average'), 'average');
-  assert.equal(validateLeaderboardType('today'), 'today');
+  assert.equal(validateLeaderboardType(undefined), 'monthly');
+  assert.equal(validateLeaderboardType('weekly'), 'weekly');
+  assert.equal(validateLeaderboardType('daily'), 'daily');
 
   assert.throws(
     () => validateLeaderboardType('invalid-type'),

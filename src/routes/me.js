@@ -41,6 +41,17 @@ export async function getMeHandler(req, res, next) {
       throw statsError;
     }
 
+    // Periksa apakah pemain pernah menebak > 2000 km untuk lencana Skill Issue
+    const { data: farRound } = await supabase
+      .from('rounds')
+      .select('id')
+      .eq('player_id', req.playerId)
+      .eq('status', 'done')
+      .gt('distance_km', 2000)
+      .limit(1);
+
+    const hasSkillIssue = Boolean(farRound && farRound.length > 0);
+
     const totalScore = Number(statsData?.total_score || 0);
     const roundsDone = Number(statsData?.rounds_done || 0);
     const bestDistanceKm =
@@ -51,7 +62,10 @@ export async function getMeHandler(req, res, next) {
     const bestOrbitDistanceKm = null;
 
     const { level, progress, progressMax } = calculateLevelAndProgress(totalScore);
-    const badges = computeBadges(statsData);
+    const badges = computeBadges({
+      ...statsData,
+      hasSkillIssue,
+    });
 
     return res.json({
       ok: true,

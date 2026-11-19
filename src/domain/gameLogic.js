@@ -13,10 +13,52 @@ export const EARTH_RADIUS_KM = 6371;
 export const MAX_ROUND_SCORE = 1000;
 export const SCORE_DECAY_CONSTANT = 1500;
 export const POINTS_PER_LEVEL = 2000;
+export const HUNTER_DISTANCE_THRESHOLD_KM = 1000;
 export const NAVIGATOR_DISTANCE_THRESHOLD_KM = 500;
 export const SNIPER_DISTANCE_THRESHOLD_KM = 100;
+export const SKILL_ISSUE_DISTANCE_THRESHOLD_KM = 2000;
 
-export const ALLOWED_HORIZONS_SECONDS = [120, 600, 1800, 5400];
+export const BADGE_METADATA = {
+  pemula: {
+    key: 'pemula',
+    label: 'Pemula',
+    hint: '1 ronde',
+    desc: 'Menyelesaikan ronde pertamamu di ISS Hunter!',
+    icon: 'rocket',
+  },
+  hunter: {
+    key: 'hunter',
+    label: 'Hunter',
+    hint: '< 1000 km',
+    desc: 'Tebakan akurat di bawah 1.000 km dari target ISS!',
+    icon: 'target',
+  },
+  navigator: {
+    key: 'navigator',
+    label: 'Navigator',
+    hint: '< 500 km',
+    desc: 'Hebat! Tebakan presisi di bawah 500 km dari target ISS!',
+    icon: 'route',
+  },
+  sniper: {
+    key: 'sniper',
+    label: 'Sniper',
+    hint: '< 100 km',
+    desc: 'Luar biasa! Tebakan super presisi di bawah 100 km!',
+    icon: 'crosshair',
+  },
+  skillIssue: {
+    key: 'skillIssue',
+    label: 'Skill Issue',
+    hint: '> 2000 km',
+    desc: 'Waduh! Tebakan meleset lebih dari 2.000 km dari posisi ISS. Tetap semangat!',
+    icon: 'alert-triangle',
+  },
+};
+
+export const ALLOWED_HORIZONS_SECONDS = [
+  120, 600, 900, 1200, 1800, 2400, 2700, 3600, 4500, 5400,
+];
 export const DEFAULT_HORIZON_SECONDS = 600;
 
 export const HORIZON_DETAILS = {
@@ -36,6 +78,22 @@ export const HORIZON_DETAILS = {
     minLevel: 1,
     description: 'Prediksi standar (~4.600 km, ~39° bujur)',
   },
+  900: {
+    seconds: 900,
+    minutes: 15,
+    label: '+15 Menit',
+    distanceEstKm: 6900,
+    minLevel: 1,
+    description: 'Prediksi ~1/6 orbit Bumi (~6.900 km)',
+  },
+  1200: {
+    seconds: 1200,
+    minutes: 20,
+    label: '+20 Menit',
+    distanceEstKm: 9200,
+    minLevel: 1,
+    description: 'Prediksi ~1/4 orbit Bumi (~9.200 km)',
+  },
   1800: {
     seconds: 1800,
     minutes: 30,
@@ -43,6 +101,38 @@ export const HORIZON_DETAILS = {
     distanceEstKm: 13800,
     minLevel: 2,
     description: 'Prediksi menengah (~13.800 km, ~1/3 keliling Bumi)',
+  },
+  2400: {
+    seconds: 2400,
+    minutes: 40,
+    label: '+40 Menit',
+    distanceEstKm: 18400,
+    minLevel: 1,
+    description: 'Prediksi ~43% orbit Bumi (~18.400 km)',
+  },
+  2700: {
+    seconds: 2700,
+    minutes: 45,
+    label: '+45 Menit',
+    distanceEstKm: 20700,
+    minLevel: 1,
+    description: 'Prediksi setengah Bumi (~20.700 km, belahan Bumi berlawanan)',
+  },
+  3600: {
+    seconds: 3600,
+    minutes: 60,
+    label: '+60 Menit',
+    distanceEstKm: 27600,
+    minLevel: 1,
+    description: 'Prediksi 2/3 orbit Bumi (~27.600 km)',
+  },
+  4500: {
+    seconds: 4500,
+    minutes: 75,
+    label: '+75 Menit',
+    distanceEstKm: 34500,
+    minLevel: 1,
+    description: 'Prediksi 5/6 orbit Bumi (~34.500 km)',
   },
   5400: {
     seconds: 5400,
@@ -231,11 +321,13 @@ export function computeBadges(
   bestDistanceKm = null,
   bestExpertDistanceKm = null,
   bestOrbitDistanceKm = null,
+  hasSkillIssueParam = false,
 ) {
   let count = 0;
   let best = null;
   let bestExpert = null;
   let bestOrbit = null;
+  let hasSkillIssue = false;
 
   if (typeof roundsDoneOrStats === 'object' && roundsDoneOrStats !== null) {
     count = Number(roundsDoneOrStats.roundsDone ?? roundsDoneOrStats.rounds_done) || 0;
@@ -249,6 +341,11 @@ export function computeBadges(
     const rawOrbit =
       roundsDoneOrStats.bestOrbitDistanceKm ?? roundsDoneOrStats.best_orbit_distance_km;
     bestOrbit = rawOrbit !== null && rawOrbit !== undefined ? Number(rawOrbit) : null;
+
+    hasSkillIssue = Boolean(roundsDoneOrStats.hasSkillIssue ?? roundsDoneOrStats.skillIssue);
+    if (!hasSkillIssue && roundsDoneOrStats.worstDistanceKm !== undefined && roundsDoneOrStats.worstDistanceKm !== null) {
+      hasSkillIssue = Number(roundsDoneOrStats.worstDistanceKm) > SKILL_ISSUE_DISTANCE_THRESHOLD_KM;
+    }
   } else {
     count = Number(roundsDoneOrStats) || 0;
     best = bestDistanceKm !== null && bestDistanceKm !== undefined ? Number(bestDistanceKm) : null;
@@ -260,14 +357,17 @@ export function computeBadges(
       bestOrbitDistanceKm !== null && bestOrbitDistanceKm !== undefined
         ? Number(bestOrbitDistanceKm)
         : null;
+    hasSkillIssue = Boolean(hasSkillIssueParam);
   }
 
   return {
     pemula: count >= 1,
+    hunter: best !== null && best < HUNTER_DISTANCE_THRESHOLD_KM,
     navigator: best !== null && best < NAVIGATOR_DISTANCE_THRESHOLD_KM,
     sniper: best !== null && best < SNIPER_DISTANCE_THRESHOLD_KM,
     orbitPenuh: bestOrbit !== null && bestOrbit < 500,
     tanpaJejak: bestExpert !== null && bestExpert < 500,
+    skillIssue: hasSkillIssue,
   };
 }
 
@@ -277,11 +377,11 @@ export function computeBadges(
  *
  * @param {object} before
  * @param {object} after
- * @returns {Array<'pemula' | 'navigator' | 'sniper' | 'orbitPenuh' | 'tanpaJejak'>}
+ * @returns {Array<'pemula' | 'hunter' | 'navigator' | 'sniper' | 'orbitPenuh' | 'tanpaJejak' | 'skillIssue'>}
  */
 export function determineNewBadges(before, after) {
   const newBadges = [];
-  const keys = ['pemula', 'navigator', 'sniper', 'orbitPenuh', 'tanpaJejak'];
+  const keys = ['pemula', 'hunter', 'navigator', 'sniper', 'orbitPenuh', 'tanpaJejak', 'skillIssue'];
 
   for (const key of keys) {
     if (!before?.[key] && after?.[key]) {

@@ -18,8 +18,11 @@
   z-index: 1000;
 }
 
-/* Wordmark murni tipografi, tanpa logo dekoratif */
+/* Brand header dengan logo dan nama */
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: var(--text-base);
@@ -30,6 +33,44 @@
 
 .brand:hover {
   color: var(--accent);
+}
+
+.brand-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  display: none;
+}
+
+/* Mode terang (default) */
+.brand-logo--light {
+  display: block;
+}
+
+.brand-logo--dark {
+  display: none;
+}
+
+/* Mode gelap (eksplisit lewat atribut data-theme="dark") */
+[data-theme='dark'] .brand-logo--light {
+  display: none;
+}
+
+[data-theme='dark'] .brand-logo--dark {
+  display: block;
+}
+
+/* Mode gelap sistem (jika data-theme tidak disetel eksplisit ke 'light') */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .brand-logo--light {
+    display: none;
+  }
+
+  :root:not([data-theme='light']) .brand-logo--dark {
+    display: block;
+  }
 }
 
 .header-actions {
