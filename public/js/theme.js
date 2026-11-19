@@ -8,10 +8,10 @@ const THEME_STORAGE_KEY = 'iss_theme';
 
 export function getPreferredTheme() {
   const saved = localStorage.getItem(THEME_STORAGE_KEY);
-  if (saved === 'light' || saved === 'dark') {
-    return saved;
+  if (saved === 'dark') {
+    return 'dark';
   }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return 'light';
 }
 
 export function applyTheme(theme) {

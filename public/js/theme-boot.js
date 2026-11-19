@@ -2,12 +2,7 @@
 (function () {
   try {
     const saved = localStorage.getItem('iss_theme');
-    const theme =
-      saved === 'light' || saved === 'dark'
-        ? saved
-        : window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light';
+    const theme = saved === 'dark' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', theme);
   } catch {
     // Abaikan jika akses storage dibatasi browser
