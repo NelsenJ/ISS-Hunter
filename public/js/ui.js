@@ -1100,17 +1100,17 @@ function renderLeaderboardContent(container, state) {
   const thead = document.createElement('thead');
   const trHead = document.createElement('tr');
   const thRank = document.createElement('th');
+  thRank.className = 'col-rank';
   thRank.textContent = '#';
-  thRank.style.width = '36px';
   const thName = document.createElement('th');
+  thName.className = 'col-name';
   thName.textContent = 'Pemain';
   const thScore = document.createElement('th');
-  const scoreLabels = { monthly: 'Score (Monthly)', weekly: 'Score (Weekly)', daily: 'Score (Daily)' };
-  thScore.textContent = scoreLabels[currentType] || 'Skor';
-  thScore.style.textAlign = 'right';
+  thScore.className = 'col-score';
+  thScore.textContent = 'Skor';
   const thRounds = document.createElement('th');
+  thRounds.className = 'col-rounds';
   thRounds.textContent = 'Ronde';
-  thRounds.style.cssText = 'text-align:right;width:55px';
   trHead.append(thRank, thName, thScore, thRounds);
   thead.append(trHead);
   table.append(thead);
@@ -1120,20 +1120,30 @@ function renderLeaderboardContent(container, state) {
 
   for (const row of rows) {
     const tr = document.createElement('tr');
-    if (myName && row.displayName?.toLowerCase() === myName.toLowerCase()) {
+    const isMe = Boolean(myName && row.displayName?.toLowerCase() === myName.toLowerCase());
+    if (isMe) {
       tr.className = 'current-player';
     }
     const tdRank = document.createElement('td');
-    tdRank.className = 'col-rank';
+    tdRank.className = `col-rank${row.rank <= 3 ? ` rank-${row.rank}` : ''}`;
     tdRank.textContent = String(row.rank);
     const tdName = document.createElement('td');
-    tdName.textContent = row.displayName;
+    tdName.className = 'col-name';
+    tdName.title = row.displayName || '';
+    tdName.textContent = row.displayName || 'Tanpa Nama';
+    if (isMe) {
+      const tag = document.createElement('span');
+      tag.style.cssText =
+        'font-size:10px;font-weight:700;color:var(--accent);margin-left:4px;opacity:0.95;white-space:nowrap';
+      tag.textContent = '(Kamu)';
+      tdName.append(tag);
+    }
     const tdScore = document.createElement('td');
     tdScore.className = 'col-score';
-    tdScore.textContent = String(row.totalScore);
+    tdScore.textContent = Number(row.totalScore || 0).toLocaleString('id-ID');
     const tdRounds = document.createElement('td');
-    tdRounds.style.cssText = 'text-align:right;color:var(--text-secondary)';
-    tdRounds.textContent = String(row.roundsDone ?? 0);
+    tdRounds.className = 'col-rounds';
+    tdRounds.textContent = Number(row.roundsDone ?? 0).toLocaleString('id-ID');
     tr.append(tdRank, tdName, tdScore, tdRounds);
     tbody.append(tr);
   }

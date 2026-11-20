@@ -207,6 +207,22 @@
 .side-panel-body {
   padding: var(--space-4);
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.side-panel-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.side-panel-body::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+  border-radius: 9999px;
+}
+
+/* Pastikan tidak ada scrollbar ganda di level window saat layar permainan aktif */
+body:has(.game-viewport) {
+  overflow: hidden;
 }
 
 /* Panel HP: Bottom sheet dengan 2 posisi berpindah lewat tombol */
@@ -353,8 +369,19 @@
     overflow-y: auto;
     flex: 1;
     /* Penting: tambahkan safe area untuk iPhone dengan home bar */
-    padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
+    padding-bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px));
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  .bottom-sheet-body::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .bottom-sheet-body::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 9999px;
   }
 
   /* Optimasi tampilan kompak kartu ronde aktif di mobile */
