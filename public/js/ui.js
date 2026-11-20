@@ -40,6 +40,7 @@ import {
   clearRoundResult,
   destroyMap,
   normalizeLng,
+  centerOnIss,
 } from './map.js';
 import {
   startIssPolling,
@@ -62,8 +63,9 @@ let authMode = 'login'; // 'login' | 'register' | 'profile'
 let mapInitialized = false;
 let countdownTimer = null;
 let activeTab = 'round'; // 'round' | 'leaderboard' | 'stats'
-let sheetExpanded = false;
+let sheetExpanded = true; // Terbuka secara default agar pemain HP langsung melihat kontrol permainan
 let lastKnownRoundStatus = null;
+let tutorialAutoStartScheduled = false;
 
 export function setBottomSheetExpanded(expanded) {
   sheetExpanded = Boolean(expanded);
@@ -73,7 +75,8 @@ export function setBottomSheetExpanded(expanded) {
     const toggleBtn = sheet.querySelector('.sheet-toggle-btn');
     if (toggleBtn) {
       toggleBtn.setAttribute('aria-label', sheetExpanded ? 'Tutup panel' : 'Buka panel');
-      toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${sheetExpanded ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"></polyline></svg>`;
+      // Chevron: saat terbuka (expanded) panah menunjuk ke BAWAH (v: tutup). Saat tertutup panah menunjuk ke ATAS (^: buka).
+      toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${sheetExpanded ? '6 9 12 15 18 9' : '18 15 12 9 6 15'}"></polyline></svg>`;
     }
   }
 }
@@ -525,12 +528,18 @@ function renderGameScreen(state) {
   renderBottomSheet(viewport, state);
 
   // Panduan otomatis untuk pemain baru (first-timer)
-  if (state.token && state.player && !isTutorialDone() && !isTutorialActive()) {
+  const curPlayerId = state.player?.id;
+  const roundsDone = Number(state.stats?.roundsDone ?? 0);
+  const isFirstTimer = !isTutorialDone(curPlayerId) || (roundsDone === 0 && !isTutorialDone(curPlayerId));
+
+  if (state.token && state.player && isFirstTimer && !isTutorialActive() && !tutorialAutoStartScheduled) {
+    tutorialAutoStartScheduled = true;
     setTimeout(() => {
-      if (!isTutorialDone() && !isTutorialActive()) {
+      tutorialAutoStartScheduled = false;
+      if (!isTutorialDone(state.player?.id) && !isTutorialActive()) {
         startInteractiveTutorial();
       }
-    }, 700);
+    }, 250);
   }
 }
 
@@ -678,9 +687,9 @@ function renderBottomSheet(viewport, state) {
   toggleBtn.className = 'sheet-toggle-btn';
   toggleBtn.setAttribute('aria-label', sheet.dataset.state === 'expanded' ? 'Tutup panel' : 'Buka panel');
 
-  // Chevron SVG: up ketika collapsed, down ketika expanded
+  // Chevron SVG: down (v) ketika expanded (tutup), up (^) ketika collapsed (buka)
   const isExp = sheet.dataset.state === 'expanded';
-  toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${isExp ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"></polyline></svg>`;
+  toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${isExp ? '6 9 12 15 18 9' : '18 15 12 9 6 15'}"></polyline></svg>`;
 
   // Toggle handler (header + tombol)
   const handleToggle = () => {
@@ -689,7 +698,7 @@ function renderBottomSheet(viewport, state) {
     // Update chevron tanpa full re-render
     const nowExp = sheetExpanded;
     toggleBtn.setAttribute('aria-label', nowExp ? 'Tutup panel' : 'Buka panel');
-    toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${nowExp ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"></polyline></svg>`;
+    toggleBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="${nowExp ? '6 9 12 15 18 9' : '18 15 12 9 6 15'}"></polyline></svg>`;
   };
   sheetHeader.addEventListener('click', handleToggle);
 
@@ -793,99 +802,150 @@ function renderRoundContent(container, state) {
   startBtn.style.width = '100%';
   startBtn.style.marginTop = 'var(--space-3)';
   startBtn.textContent = 'Mulai Ronde';
-  startBtn.addEventListener('click', startNewRoundAction);
+  startBtn.addEventListener('click', () => startNewRoundAction(startBtn));
 
   container.append(box, startBtn);
 }
 
 function renderActiveRound(container, state) {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
   const roundBox = document.createElement('div');
+  roundBox.className = 'round-active-box';
   const horizonSec = state.activeRound.horizonSeconds || 600;
   const horizonMin = Math.round(horizonSec / 60);
   const distanceEst = Math.round((27600 / 60) * horizonMin);
   const orbitPct = Math.round((horizonMin / 92) * 100);
 
-  // Kartu Target Misi
+  // Kartu Target Misi (ringkas & padat di HP)
   const missionBadge = document.createElement('div');
   missionBadge.id = 'mission-target-badge';
-  missionBadge.className = 'panel';
-  missionBadge.style.cssText =
-    'padding:var(--space-3);margin-bottom:var(--space-3);background:color-mix(in srgb, var(--accent) 8%, var(--surface));border:1px solid color-mix(in srgb, var(--accent) 25%, transparent);border-radius:var(--radius-md)';
+  missionBadge.className = 'panel round-target-panel';
+  missionBadge.style.cssText = isMobile
+    ? 'padding:var(--space-2) var(--space-3);margin-bottom:var(--space-2);background:color-mix(in srgb, var(--accent) 8%, var(--surface));border:1px solid color-mix(in srgb, var(--accent) 25%, transparent);border-radius:var(--radius-md)'
+    : 'padding:var(--space-3);margin-bottom:var(--space-3);background:color-mix(in srgb, var(--accent) 8%, var(--surface));border:1px solid color-mix(in srgb, var(--accent) 25%, transparent);border-radius:var(--radius-md)';
 
-  const missionTitle = document.createElement('div');
-  missionTitle.style.cssText =
-    'font-size:var(--text-xs);font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px';
-  missionTitle.textContent = 'Target Misi';
+  if (isMobile) {
+    const missionDesc = document.createElement('div');
+    missionDesc.style.cssText = 'font-size:var(--text-xs);font-weight:700;color:var(--accent);line-height:1.3';
+    missionDesc.textContent = `TARGET: PREDIKSI ISS +${horizonMin} MENIT`;
 
-  const missionDesc = document.createElement('div');
-  missionDesc.style.cssText = 'font-size:var(--text-sm);font-weight:600;color:var(--text)';
-  missionDesc.textContent = `Prediksi Posisi ISS +${horizonMin} Menit Ke Depan`;
+    const missionHint = document.createElement('div');
+    missionHint.style.cssText = 'font-size:11px;color:var(--text-secondary);margin-top:2px;line-height:1.3';
+    missionHint.textContent = `Orbit: ~${distanceEst.toLocaleString('id-ID')} km (~${orbitPct}% putaran Bumi)`;
 
-  const missionHint = document.createElement('div');
-  missionHint.style.cssText = 'font-size:var(--text-xs);color:var(--text-secondary);margin-top:2px';
-  missionHint.textContent = `Jarak tempuh orbit: ~${distanceEst.toLocaleString('id-ID')} km (~${orbitPct}% satu putaran Bumi)`;
+    missionBadge.append(missionDesc, missionHint);
+  } else {
+    const missionTitle = document.createElement('div');
+    missionTitle.style.cssText =
+      'font-size:var(--text-xs);font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px';
+    missionTitle.textContent = 'Target Misi';
 
-  missionBadge.append(missionTitle, missionDesc, missionHint);
+    const missionDesc = document.createElement('div');
+    missionDesc.style.cssText = 'font-size:var(--text-sm);font-weight:600;color:var(--text)';
+    missionDesc.textContent = `Prediksi Posisi ISS +${horizonMin} Menit Ke Depan`;
+
+    const missionHint = document.createElement('div');
+    missionHint.style.cssText = 'font-size:var(--text-xs);color:var(--text-secondary);margin-top:2px';
+    missionHint.textContent = `Jarak tempuh orbit: ~${distanceEst.toLocaleString('id-ID')} km (~${orbitPct}% satu putaran Bumi)`;
+
+    missionBadge.append(missionTitle, missionDesc, missionHint);
+  }
   roundBox.append(missionBadge);
 
   // Countdown
   const countdownWrap = document.createElement('div');
-  countdownWrap.style.cssText =
-    'display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-2);margin-bottom:var(--space-1)';
+  countdownWrap.className = 'round-countdown-wrap';
+  countdownWrap.style.cssText = isMobile
+    ? 'display:flex;justify-content:space-between;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)'
+    : 'display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-2);margin-bottom:var(--space-1)';
 
   const timeLabel = document.createElement('span');
   timeLabel.className = 'stat-label';
-  timeLabel.textContent = 'Sisa waktu untuk mengunci tebakan';
+  timeLabel.textContent = isMobile ? 'Sisa waktu:' : 'Sisa waktu untuk mengunci tebakan';
 
   const timeValue = document.createElement('span');
   timeValue.className = 'stat-value tabular';
   timeValue.id = 'countdown-timer-value';
   timeValue.textContent = formatRemainingTime(state.activeRound.startedAt);
   countdownWrap.append(timeLabel, timeValue);
+  roundBox.append(countdownWrap);
 
-  const timerNote = document.createElement('p');
-  timerNote.className = 'form-hint';
-  timerNote.style.cssText = 'margin-bottom:var(--space-3);line-height:1.4';
-  timerNote.textContent = 'Hasil dan skor langsung dihitung setelah kamu mengunci tebakan.';
+  if (!isMobile) {
+    const timerNote = document.createElement('p');
+    timerNote.className = 'form-hint round-timer-note';
+    timerNote.style.cssText = 'margin-bottom:var(--space-3);line-height:1.4';
+    timerNote.textContent = 'Hasil dan skor langsung dihitung setelah kamu mengunci tebakan.';
+    roundBox.append(timerNote);
+  }
 
   startCountdownTimer(state.activeRound.startedAt);
 
-  roundBox.append(countdownWrap, timerNote);
-
   // Guess info
   const guessInfo = document.createElement('div');
-  guessInfo.className = 'panel';
-  guessInfo.style.marginBottom = 'var(--space-4)';
+  guessInfo.className = 'panel round-guess-panel';
+  guessInfo.style.marginBottom = isMobile ? 'var(--space-2)' : 'var(--space-4)';
+  if (isMobile) {
+    guessInfo.style.padding = 'var(--space-2) var(--space-3)';
+  }
 
   if (state.draftGuess) {
     const latText = state.draftGuess.lat.toFixed(4);
     const lngText = state.draftGuess.lng.toFixed(4);
-    const labelEl = document.createElement('div');
-    labelEl.className = 'stat-label';
-    labelEl.style.marginBottom = '4px';
-    labelEl.textContent = 'Titik Tebakan:';
-    const valEl = document.createElement('div');
-    valEl.className = 'stat-value tabular';
-    valEl.style.fontSize = 'var(--text-sm)';
-    valEl.textContent = `${latText}°, ${lngText}°`;
-    const hintEl = document.createElement('div');
-    hintEl.className = 'form-hint';
-    hintEl.style.marginTop = '6px';
-    hintEl.textContent = 'Tekan Esc untuk membatalkan penanda';
-    guessInfo.append(labelEl, valEl, hintEl);
+
+    if (isMobile) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)';
+
+      const textSpan = document.createElement('span');
+      textSpan.style.cssText = 'font-size:var(--text-xs);font-weight:600;color:var(--text)';
+      textSpan.textContent = `Tebakan: ${latText}°, ${lngText}°`;
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'btn';
+      cancelBtn.style.cssText =
+        'min-height:26px;height:26px;padding:0 var(--space-2);font-size:var(--text-xs);line-height:1';
+      cancelBtn.textContent = 'Hapus';
+      cancelBtn.addEventListener('click', () => {
+        clearDraftGuess();
+        setGuessMarker(null);
+        render(getState());
+      });
+
+      row.append(textSpan, cancelBtn);
+      guessInfo.append(row);
+    } else {
+      const labelEl = document.createElement('div');
+      labelEl.className = 'stat-label';
+      labelEl.style.marginBottom = '4px';
+      labelEl.textContent = 'Titik Tebakan:';
+      const valEl = document.createElement('div');
+      valEl.className = 'stat-value tabular';
+      valEl.style.fontSize = 'var(--text-sm)';
+      valEl.textContent = `${latText}°, ${lngText}°`;
+      const hintEl = document.createElement('div');
+      hintEl.className = 'form-hint';
+      hintEl.style.marginTop = '6px';
+      hintEl.textContent = 'Tekan Esc untuk membatalkan penanda';
+      guessInfo.append(labelEl, valEl, hintEl);
+    }
   } else {
     const hint = document.createElement('div');
-    hint.style.cssText = 'font-size:var(--text-sm);color:var(--text-secondary);line-height:1.4';
-    hint.textContent = `Klik titik di peta di mana kamu memperkirakan ISS akan berada ${horizonMin} menit ke depan.`;
+    hint.style.cssText = isMobile
+      ? 'font-size:var(--text-xs);color:var(--text-secondary);line-height:1.3'
+      : 'font-size:var(--text-sm);color:var(--text-secondary);line-height:1.4';
+    hint.textContent = isMobile
+      ? `Ketuk peta pada perkiraan posisi ISS (+${horizonMin} mnt).`
+      : `Klik titik di peta di mana kamu memperkirakan ISS akan berada ${horizonMin} menit ke depan.`;
     guessInfo.append(hint);
   }
 
   const lockBtn = document.createElement('button');
   lockBtn.type = 'button';
   lockBtn.id = 'lock-guess-btn';
-  lockBtn.className = 'btn btn-primary';
+  lockBtn.className = 'btn btn-primary round-lock-btn';
   lockBtn.style.width = '100%';
-  lockBtn.textContent = 'Kunci Tebakan (Enter)';
+  lockBtn.textContent = isMobile ? 'Kunci Tebakan' : 'Kunci Tebakan (Enter)';
   lockBtn.disabled = !state.draftGuess;
   lockBtn.addEventListener('click', lockGuessAction);
 
@@ -951,7 +1011,7 @@ function renderRoundResult(container, state) {
   nextBtn.textContent = 'Mulai Ronde Baru';
   nextBtn.addEventListener('click', () => {
     clearRoundResult();
-    startNewRoundAction();
+    startNewRoundAction(nextBtn);
   });
 
   container.append(resultBox, nextBtn);
@@ -1263,9 +1323,29 @@ function formatRemainingTime(startedAt) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-async function startNewRoundAction() {
+let isStartingRound = false;
+
+async function startNewRoundAction(triggerBtn = null) {
+  if (isStartingRound) return;
   const state = getState();
   if (!state.token) return;
+
+  isStartingRound = true;
+
+  // Pasang animasi spinner loading dan status disabled pada tombol pemicu
+  const targetButtons = triggerBtn
+    ? [triggerBtn]
+    : Array.from(document.querySelectorAll('#start-round-btn'));
+
+  for (const btn of targetButtons) {
+    btn.disabled = true;
+    btn.classList.add('is-loading');
+    btn.replaceChildren(
+      createIcon('loader', 16, 'animate-spin'),
+      document.createTextNode(' Memulai Ronde…'),
+    );
+  }
+
   try {
     clearRoundResult();
     clearDraftGuess();
@@ -1274,10 +1354,31 @@ async function startNewRoundAction() {
     setActiveRound(roundData);
     const roundHorizon = roundData.horizonSeconds || DEFAULT_HORIZON_SECONDS;
     setTrailHorizon(roundHorizon);
-    fetchCurrentIssPosition().then((pos) => updateIssPosition(pos)).catch(() => {});
-    fetchIssTrail(roundHorizon).then((trail) => updateIssTrail(trail)).catch(() => {});
+
+    // Pusatkan peta ke ISS & orbitnya langsung saat ronde baru dimulai (di HP maupun laptop)
+    centerOnIss();
+
+    fetchCurrentIssPosition()
+      .then((pos) => {
+        updateIssPosition(pos);
+        centerOnIss();
+      })
+      .catch(() => {});
+    fetchIssTrail(roundHorizon)
+      .then((trail) => {
+        updateIssTrail(trail);
+        centerOnIss();
+      })
+      .catch(() => {});
   } catch (err) {
+    for (const btn of targetButtons) {
+      btn.disabled = false;
+      btn.classList.remove('is-loading');
+      btn.replaceChildren(document.createTextNode('Mulai Ronde'));
+    }
     setRoundStatus('idle', null, err.message || 'Gagal memulai ronde baru.');
+  } finally {
+    isStartingRound = false;
   }
 }
 

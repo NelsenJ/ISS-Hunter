@@ -348,6 +348,29 @@
     padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
     -webkit-overflow-scrolling: touch;
   }
+
+  /* Optimasi tampilan kompak kartu ronde aktif di mobile */
+  .bottom-sheet .round-target-panel {
+    padding: var(--space-2) var(--space-3) !important;
+    margin-bottom: var(--space-2) !important;
+  }
+
+  .bottom-sheet .round-countdown-wrap {
+    margin-bottom: var(--space-2) !important;
+  }
+
+  .bottom-sheet .round-timer-note {
+    display: none !important;
+  }
+
+  .bottom-sheet .round-guess-panel {
+    padding: var(--space-2) var(--space-3) !important;
+    margin-bottom: var(--space-2) !important;
+  }
+
+  .bottom-sheet .round-lock-btn {
+    min-height: 40px !important;
+  }
 }
 
 /* ==========================================================================

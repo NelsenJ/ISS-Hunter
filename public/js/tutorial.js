@@ -116,15 +116,13 @@ export function closeInteractiveTutorial(markDone = true) {
   document.removeEventListener('keydown', handleKeydown);
 
   if (markDone) {
-    setTutorialDone(true);
+    const curPlayerId = typeof getState === 'function' ? getState()?.player?.id : null;
+    setTutorialDone(true, curPlayerId);
   }
 
-  // Kembalikan status panel bawah ke kondisi awal di HP
+  // Di HP, pastikan bottom sheet tetap terbuka dalam kondisi idle agar tombol Mulai Ronde langsung terlihat
   if (typeof window !== 'undefined' && window.innerWidth <= 768) {
-    const roundState = typeof getState === 'function' ? getState()?.roundStatus : 'idle';
-    if (roundState !== 'active' && roundState !== 'result') {
-      setBottomSheetExpanded(false);
-    }
+    setBottomSheetExpanded(true);
   }
 
   if (callbacks.onComplete) {
@@ -252,6 +250,7 @@ function updateOverlayAndArrow(targetEl, stepDef) {
     if (spotlightBox) spotlightBox.style.display = 'none';
     if (beacon) beacon.style.display = 'none';
     if (arrow) arrow.style.display = 'none';
+    if (activeOverlay) activeOverlay.classList.add('dimmed');
     card.style.top = '50%';
     card.style.left = '50%';
     card.style.transform = 'translate(-50%, -50%)';
@@ -263,11 +262,15 @@ function updateOverlayAndArrow(targetEl, stepDef) {
     if (spotlightBox) spotlightBox.style.display = 'none';
     if (beacon) beacon.style.display = 'none';
     if (arrow) arrow.style.display = 'none';
+    if (activeOverlay) activeOverlay.classList.add('dimmed');
     card.style.top = '50%';
     card.style.left = '50%';
     card.style.transform = 'translate(-50%, -50%)';
     return;
   }
+
+  // Jika spotlight aktif, hilangkan background gelap global agar target di balik spotlight bersinar terang
+  if (activeOverlay) activeOverlay.classList.remove('dimmed');
 
   // Spotlight Box
   const pad = 8;
@@ -287,9 +290,9 @@ function updateOverlayAndArrow(targetEl, stepDef) {
   // Dynamic Card & Arrow Placement
   const viewportW = window.innerWidth;
   const viewportH = window.innerHeight;
-  const cardW = Math.min(390, viewportW - 24);
-  const cardH = 260;
-  const gap = 20;
+  const cardW = Math.min(390, viewportW - 20);
+  const cardH = 210; // Perkiraan tinggi kartu setelah dioptimalkan lebih ringkas di HP
+  const gap = 16;
   let cardPlacedAbove = false;
 
   card.style.transform = 'none';
@@ -302,23 +305,25 @@ function updateOverlayAndArrow(targetEl, stepDef) {
 
   if (viewportW <= 768) {
     // Layar ponsel: selalu posisikan tengah secara horizontal
-    const headerH = 60;
+    const headerH = 56;
     card.style.left = `${(viewportW - cardW) / 2}px`;
 
     const spaceBelow = viewportH - targetRect.bottom;
 
-    if (spaceBelow >= cardH + gap) {
-      // Ada cukup ruang di bawah target (mis. Legenda di atas, atau Tab jika card muat di bawah)
+    // Untuk langkah yang membuka panel (3, 4, 6, 7) atau jika ruang bawah sempit:
+    // Naikkan kartu tepat di bawah navbar header (top: headerH + 6)
+    // agar kartu tidak menutupi tombol atau panel permainan di bawahnya!
+    if (stepDef.expandSheet || spaceBelow < cardH + gap) {
+      const cTop = headerH + 6;
+      card.style.top = `${cTop}px`;
+      if (arrow) arrow.classList.add('arrow-bottom');
+      cardPlacedAbove = true;
+    } else {
+      // Ada cukup ruang di bawah target (mis. Legenda di pojok atas)
       const cTop = Math.min(viewportH - cardH - 12, targetRect.bottom + gap);
       card.style.top = `${cTop}px`;
       if (arrow) arrow.classList.add('arrow-top');
       cardPlacedAbove = false;
-    } else {
-      // Tidak cukup ruang di bawah → tempatkan di atas target (atau dekat header)
-      const cTop = Math.max(headerH + 8, Math.min(viewportH - cardH - 12, targetRect.top - cardH - gap));
-      card.style.top = `${cTop}px`;
-      if (arrow) arrow.classList.add('arrow-bottom');
-      cardPlacedAbove = true;
     }
   } else {
     // Layar Desktop
@@ -518,8 +523,8 @@ export function startInteractiveTutorial({ onComplete = null } = {}) {
   callbacks.onComplete = onComplete;
   currentStep = 0;
 
-  // Pada tampilan HP, langsung arahkan peta ke koordinat ISS
-  if (typeof window !== 'undefined' && window.innerWidth <= 768 && typeof centerOnIss === 'function') {
+  // Arahkan peta langsung ke koordinat ISS tepat di tengah (laptop maupun HP)
+  if (typeof centerOnIss === 'function') {
     centerOnIss();
   }
 

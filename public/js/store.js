@@ -91,6 +91,20 @@ export function setAuthSessionWithPlayer(user, token, player, stats) {
   state.stats = stats;
   state.profileRequired = false;
 
+  if (player?.id) {
+    try {
+      const perPlayer = localStorage.getItem(`iss_tutorial_done_${player.id}`);
+      if (perPlayer !== null) {
+        state.tutorialDone = perPlayer === '1';
+      } else {
+        // Akun baru yang belum pernah menyelesaikan tutorial di browser ini
+        state.tutorialDone = false;
+      }
+    } catch {
+      state.tutorialDone = false;
+    }
+  }
+
   if (player) {
     try {
       localStorage.setItem(
@@ -108,6 +122,20 @@ export function setPlayerData(player, stats) {
   state.player = player;
   state.stats = stats;
   state.profileRequired = false;
+
+  if (player?.id) {
+    try {
+      const perPlayer = localStorage.getItem(`iss_tutorial_done_${player.id}`);
+      if (perPlayer !== null) {
+        state.tutorialDone = perPlayer === '1';
+      } else {
+        // Akun baru yang belum pernah menyelesaikan tutorial di browser ini
+        state.tutorialDone = false;
+      }
+    } catch {
+      state.tutorialDone = false;
+    }
+  }
 
   if (player) {
     try {
@@ -166,13 +194,25 @@ export function setIssPosition(pos) {
   notify();
 }
 
-export function isTutorialDone() {
+export function isTutorialDone(playerId = null) {
+  const pid = playerId || state.player?.id;
+  if (pid) {
+    try {
+      const perPlayer = localStorage.getItem(`iss_tutorial_done_${pid}`);
+      if (perPlayer !== null) return perPlayer === '1';
+    } catch { void 0; }
+  }
   return Boolean(state.tutorialDone);
 }
-export function setTutorialDone(done) {
+export function setTutorialDone(done, playerId = null) {
   state.tutorialDone = Boolean(done);
+  const val = state.tutorialDone ? '1' : '0';
+  const pid = playerId || state.player?.id;
   try {
-    localStorage.setItem(TUTORIAL_DONE_KEY, state.tutorialDone ? '1' : '0');
+    localStorage.setItem(TUTORIAL_DONE_KEY, val);
+    if (pid) {
+      localStorage.setItem(`iss_tutorial_done_${pid}`, val);
+    }
   } catch { void 0; }
   notify();
 }

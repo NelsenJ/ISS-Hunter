@@ -214,15 +214,18 @@ export function initMap(containerEl, currentTheme = 'light', onMapClick = null) 
     destroyMap();
   }
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const initialZoom = isMobile ? 2.5 : 3;
+
   mapInstance = window.L.map(containerEl, {
     zoomControl: false,
     minZoom: 2,
     maxZoom: 10,
+    zoomSnap: 0.5,
     worldCopyJump: true,
-  }).setView([0, 0], 2);
+  }).setView([0, 0], initialZoom);
 
   // Pasang kontrol zoom: kiri atas di mobile, kanan bawah di desktop
-  const isMobile = window.innerWidth <= 768;
   window.L.control.zoom({ position: isMobile ? 'topleft' : 'bottomright' }).addTo(mapInstance);
 
   const tileUrl = currentTheme === 'dark' ? CARTO_DARK : CARTO_LIGHT;
@@ -266,20 +269,34 @@ export function setMapTheme(theme) {
   tileLayer.setUrl(targetUrl);
 }
 
-let hasAutoCenteredMobile = false;
+let hasAutoCentered = false;
 
 /**
  * Mengarahkan pandangan peta langsung ke koordinat terkini ISS.
+ * Pada laptop dan mobile, menghindari zoom-out berlebihan (min zoom 3 pada laptop) agar tidak memicu lag rendering tile.
  *
  * @param {number|null} [zoom=null]
  * @returns {boolean}
  */
 export function centerOnIss(zoom = null) {
   if (!mapInstance || !latestIssPos) return false;
-  const targetZoom =
-    zoom !== null ? zoom : typeof mapInstance.getZoom === 'function' ? mapInstance.getZoom() : 2;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const defaultZoom = isMobile ? 2.5 : 3;
+  const targetZoom = zoom !== null ? zoom : defaultZoom;
+  if (typeof mapInstance.invalidateSize === 'function') {
+    mapInstance.invalidateSize();
+  }
   if (typeof mapInstance.setView === 'function') {
     mapInstance.setView([latestIssPos.lat, latestIssPos.lng], targetZoom, { animate: true });
+    if (isMobile) {
+      const bottomSheet = typeof document !== 'undefined' ? document.getElementById('bottom-sheet') : null;
+      if (bottomSheet && bottomSheet.dataset.state === 'expanded') {
+        const sheetHeight = bottomSheet.offsetHeight || 160;
+        if (typeof mapInstance.panBy === 'function') {
+          mapInstance.panBy([0, Math.round(sheetHeight / 3)], { animate: false });
+        }
+      }
+    }
     return true;
   }
   return false;
@@ -310,11 +327,14 @@ export function updateIssPosition(pos) {
 
   const latlng = [pos.lat, pos.lng];
 
-  // Pada tampilan HP, saat koordinat ISS pertama kali didapatkan, langsung arahkan layar ke ISS
-  if (isFirstPos && !hasAutoCenteredMobile && typeof window !== 'undefined' && window.innerWidth <= 768) {
-    hasAutoCenteredMobile = true;
+  // Saat koordinat ISS pertama kali didapatkan, langsung arahkan layar tepat ke ISS di tengah
+  // Menggunakan zoom 3 di desktop/laptop agar tidak zoomout berlebihan (menghindari duplikasi tile & lag)
+  if (isFirstPos && !hasAutoCentered && typeof window !== 'undefined') {
+    hasAutoCentered = true;
     if (typeof mapInstance.setView === 'function') {
-      mapInstance.setView(latlng, typeof mapInstance.getZoom === 'function' ? mapInstance.getZoom() : 2);
+      const isMobile = window.innerWidth <= 768;
+      const initialZoom = isMobile ? 2.5 : 3;
+      mapInstance.setView(latlng, initialZoom);
     }
   }
 
@@ -586,7 +606,7 @@ export function destroyMap() {
     practiceLayer = null;
     latestIssPos = null;
     lastTrailPoints = [];
-    hasAutoCenteredMobile = false;
+    hasAutoCentered = false;
   }
 }
 
