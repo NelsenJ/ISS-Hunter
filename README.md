@@ -1,6 +1,6 @@
 # ISS Hunter
 
-Game web edukasi multipemain untuk memprediksi posisi Stasiun Luar Angkasa Internasional (*International Space Station* / ISS) secara *real-time* berdasarkan proyeksi arah dan jejak orbit lintasannya.
+Game web multipemain untuk memprediksi posisi Stasiun Luar Angkasa Internasional (*International Space Station* / ISS) secara *real-time* berdasarkan proyeksi arah dan jejak orbit lintasannya.
 
 Aplikasi Live: [https://iss-hunter.vercel.app](https://iss-hunter.vercel.app)
 
@@ -22,9 +22,6 @@ Aplikasi Live: [https://iss-hunter.vercel.app](https://iss-hunter.vercel.app)
   - [Internal API](#internal-api)
   - [External API & Sumber Data](#external-api--sumber-data)
 - [Struktur Direktori](#struktur-direktori)
-- [Instalasi dan Menjalankan Lokal](#instalasi-dan-menjalankan-lokal)
-- [Pengujian dan Standar Kode](#pengujian-dan-standar-kode)
-- [Deployment](#deployment)
 - [Kredit](#kredit)
 
 ---
@@ -261,73 +258,6 @@ iss-hunter/
 ├── package.json                  # Konfigurasi proyek dan dependensi
 └── .env.example                  # Contoh konfigurasi environment variable
 ```
-
----
-
-## Instalasi dan Menjalankan Lokal
-
-### Prasyarat
-- Node.js versi 22.x
-- npm versi 10+
-- Akun dan proyek aktif di Supabase
-
-### Langkah Pemasangan
-
-1. **Kloning repositori:**
-   ```bash
-   git clone https://github.com/username/iss-hunter.git
-   cd iss-hunter
-   ```
-
-2. **Pasang dependensi:**
-   ```bash
-   npm install
-   ```
-
-3. **Konfigurasi Environment Variable:**
-   Salin `.env.example` ke `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-   Lengkapi data konfigurasi dari dashboard Supabase:
-   ```env
-   PORT=3000
-   NODE_ENV=development
-   SUPABASE_URL=https://your-project.supabase.co
-   SUPABASE_PUBLISHABLE_KEY=your-publishable-key
-   SUPABASE_SECRET_KEY=your-secret-key
-   ```
-
-4. **Eksekusi Skema Database:**
-   Jalankan berkas `supabase/schema.sql` dan seluruh skrip migrasi yang berada di folder `supabase/` pada SQL Editor Supabase.
-
-5. **Jalankan Server Lokal:**
-   ```bash
-   npm run dev
-   ```
-   Aplikasi dapat diakses melalui browser di `http://localhost:3000`.
-
----
-
-## Pengujian dan Standar Kode
-
-| Perintah | Deskripsi |
-|---|---|
-| `npm test` | Menjalankan seluruh pengujian unit otomatis (`node --test`) |
-| `npm run lint` | Memeriksa kepatuhan kode terhadap aturan ESLint |
-| `npm run format` | Memformat kode sumber menggunakan Prettier |
-| `npm run format:check` | Memvalidasi kepatuhan format kode |
-
----
-
-## Deployment
-
-Aplikasi dirancang untuk di-deploy secara langsung pada platform **Vercel** dan **Supabase**:
-
-1. Impor repositori ke Vercel.
-2. Vercel akan membaca berkas `vercel.json` dan menjalankan `src/app.js` sebagai Serverless Function.
-3. Tambahkan variabel lingkungan `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, dan `SUPABASE_SECRET_KEY` pada pengaturan proyek di Vercel.
-4. Lakukan deployment.
 
 ---
 
