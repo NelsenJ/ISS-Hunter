@@ -151,6 +151,9 @@ export function render(state = getState()) {
     mapInitialized = false;
     stopCountdownTimer();
     stopIssPolling();
+    // Hapus bottom-sheet dari body saat user keluar/logout agar tidak ada sisa DOM
+    const orphanSheet = document.getElementById('bottom-sheet');
+    if (orphanSheet) orphanSheet.remove();
     destroyMap();
     renderAuthScreen(state);
     return;
@@ -603,6 +606,13 @@ function renderMapLegend(viewport) {
 // ─── Desktop Side Panel ───────────────────────────────────────────────────────
 
 function renderDesktopPanel(viewport, state) {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  if (isMobile) {
+    const existing = document.getElementById('side-panel');
+    if (existing) existing.remove();
+    return;
+  }
+
   let panel = document.getElementById('side-panel');
   if (!panel) {
     panel = document.createElement('div');
@@ -628,21 +638,28 @@ function renderDesktopPanel(viewport, state) {
 // ─── Bottom Sheet ─────────────────────────────────────────────────────────────
 
 function renderBottomSheet(viewport, state) {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  if (!isMobile) {
+    const existing = document.getElementById('bottom-sheet');
+    if (existing) existing.remove();
+    return;
+  }
+
+  // Pastikan bottom-sheet selalu di-append ke document.body agar position:fixed bekerja
+  // bahkan ketika parent mempunyai overflow:hidden atau transform
   let sheet = document.getElementById('bottom-sheet');
   if (!sheet) {
     sheet = document.createElement('div');
     sheet.id = 'bottom-sheet';
     sheet.className = 'bottom-sheet';
-    viewport.append(sheet);
+    document.body.append(sheet);
+  } else if (sheet.parentElement !== document.body) {
+    document.body.append(sheet);
   }
 
-  // Sinkronkan status buka otomatis saat status ronde berubah (misal baru mulai ronde atau ada hasil)
+  // Sinkronkan status buka otomatis saat status ronde berubah (selalu buka agar tombol selalu tampak)
   if (lastKnownRoundStatus !== state.roundStatus) {
-    if (state.roundStatus === 'active' || state.roundStatus === 'result') {
-      sheetExpanded = true;
-    } else if (lastKnownRoundStatus === 'result' && state.roundStatus === 'idle') {
-      sheetExpanded = false;
-    }
+    sheetExpanded = true;
     lastKnownRoundStatus = state.roundStatus;
   }
 

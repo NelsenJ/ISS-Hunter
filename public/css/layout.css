@@ -175,13 +175,16 @@
   position: relative;
   width: 100%;
   height: calc(100vh - var(--header-height));
+  height: calc(100dvh - var(--header-height));
   overflow: hidden;
+  touch-action: manipulation;
 }
 
 .map-container {
   width: 100%;
   height: 100%;
   z-index: 1;
+  touch-action: manipulation;
 }
 
 /* Panel Desktop (Satu panel kiri selebar 340px) */
@@ -268,7 +271,7 @@
   .bottom-sheet {
     display: flex;
     flex-direction: column;
-    position: absolute;
+    position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
@@ -276,15 +279,20 @@
     border-top: 1px solid var(--border-subtle);
     border-radius: var(--radius-md) var(--radius-md) 0 0;
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
-    z-index: 500;
-    /* Tinggi max ketika expanded: sisakan 25% layar untuk peta */
+    z-index: 1000;
+    /* Tinggi max ketika expanded: sisakan minimal 28% layar untuk peta */
     max-height: 72vh;
+    max-height: 72dvh;
     transition: transform var(--duration-base) var(--ease-standard);
+    will-change: transform;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .bottom-sheet[data-state='collapsed'] {
-    /* Hanya tampilkan header 56px */
-    transform: translateY(calc(100% - 56px));
+    /* Hanya tampilkan header 56px di atas bagian bawah layar / safe area */
+    transform: translateY(calc(100% - 56px - env(safe-area-inset-bottom, 0px)));
   }
 
   .bottom-sheet[data-state='expanded'] {

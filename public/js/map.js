@@ -195,6 +195,8 @@ function createAnswerIcon() {
   });
 }
 
+let lastRenderedBearing = null;
+
 /**
  * Inisialisasi peta Leaflet pada elemen kontainer.
  *
@@ -222,7 +224,10 @@ export function initMap(containerEl, currentTheme = 'light', onMapClick = null) 
     minZoom: 2,
     maxZoom: 10,
     zoomSnap: 0.5,
-    worldCopyJump: true,
+    preferCanvas: true, // Render semua vektor/polyline ke Canvas GPU hardware-accelerated
+    worldCopyJump: false, // Nonaktifkan di mobile untuk menghilangkan stutter saat sentuhan/pan
+    fadeAnimation: true,
+    markerZoomAnimation: true,
   }).setView([0, 0], initialZoom);
 
   // Pasang kontrol zoom: kiri atas di mobile, kanan bawah di desktop
@@ -233,6 +238,9 @@ export function initMap(containerEl, currentTheme = 'light', onMapClick = null) 
     attribution: MAP_ATTRIBUTION,
     subdomains: 'abcd',
     maxZoom: 19,
+    updateWhenIdle: isMobile, // Di HP: hanya minta tile baru setelah pan selesai agar tidak lag
+    updateWhenZooming: false,
+    keepBuffer: isMobile ? 2 : 4,
   }).addTo(mapInstance);
 
   // Lapisan garis jejak ISS
@@ -357,6 +365,7 @@ export function updateIssPosition(pos) {
       icon: createIssIcon(lastKnownBearing, currentDifficulty !== 'expert'),
       zIndexOffset: 1000,
     }).addTo(mapInstance);
+    lastRenderedBearing = lastKnownBearing;
     issMarker.bindTooltip('ISS (Sedang Mengorbit)', {
       direction: 'top',
       offset: [0, -16],
@@ -364,7 +373,11 @@ export function updateIssPosition(pos) {
     });
   } else {
     issMarker.setLatLng(latlng);
-    issMarker.setIcon(createIssIcon(lastKnownBearing, currentDifficulty !== 'expert'));
+    // Hanya perbarui icon jika rotasi/bearing berubah signifikan (>= 1 derajat) agar tidak memicu lag DOM
+    if (lastRenderedBearing === null || Math.abs(lastKnownBearing - lastRenderedBearing) >= 1) {
+      lastRenderedBearing = lastKnownBearing;
+      issMarker.setIcon(createIssIcon(lastKnownBearing, currentDifficulty !== 'expert'));
+    }
   }
 
   // Otomatis sambungkan ujung terdepan jejak ke posisi baru ISS
@@ -639,6 +652,7 @@ export function destroyMap() {
     latestIssPos = null;
     lastTrailPoints = [];
     hasAutoCentered = false;
+    lastRenderedBearing = null;
   }
 }
 
