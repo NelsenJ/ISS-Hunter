@@ -267,6 +267,20 @@ export function initMap(containerEl, currentTheme = 'light', onMapClick = null) 
 }
 
 /**
+ * Mendapatkan nilai kode warna aksen (oranye) nyata untuk rendering Canvas/Leaflet.
+ * Menghindari nilai CSS variable 'var(--accent)' yang tidak dapat diproses oleh HTML5 Canvas 2D context.
+ *
+ * @returns {string}
+ */
+export function getAccentColor() {
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    const computed = window.getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    if (computed) return computed;
+  }
+  return '#c2410c';
+}
+
+/**
  * Mengganti tema peta dasar (CARTO Light atau Dark).
  *
  * @param {'light' | 'dark'} theme
@@ -275,6 +289,9 @@ export function setMapTheme(theme) {
   if (!tileLayer) return;
   const targetUrl = theme === 'dark' ? CARTO_DARK : CARTO_LIGHT;
   tileLayer.setUrl(targetUrl);
+  if (lastTrailPoints && lastTrailPoints.length > 0) {
+    renderTrailLines(lastTrailPoints);
+  }
 }
 
 let hasAutoCentered = false;
@@ -422,11 +439,12 @@ function renderTrailLines(trailPoints) {
 
   // Pecah menjadi segmen aman agar tidak memotong peta di antimeridian (180° / -180°)
   const segments = splitAntimeridianSegments(fullPoints);
+  const strokeColor = getAccentColor();
 
   for (const seg of segments) {
     if (seg.length >= 2) {
       window.L.polyline(seg, {
-        color: 'var(--accent)',
+        color: strokeColor,
         weight: 3,
         opacity: 0.85,
         lineCap: 'round',
@@ -550,6 +568,8 @@ export function showRoundResult(guessCoords, answerCoords, horizonSeconds = 600)
     window.matchMedia &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  const strokeColor = getAccentColor();
+
   if (prefersReducedMotion) {
     connectionLine = window.L.polyline(
       [
@@ -557,7 +577,7 @@ export function showRoundResult(guessCoords, answerCoords, horizonSeconds = 600)
         [visualAnswer.lat, visualAnswer.lng],
       ],
       {
-        color: 'var(--accent)',
+        color: strokeColor,
         weight: 2.5,
         dashArray: '5, 8',
         opacity: 0.95,
@@ -574,7 +594,7 @@ export function showRoundResult(guessCoords, answerCoords, horizonSeconds = 600)
         [guessCoords.lat, guessCoords.lng],
       ],
       {
-        color: 'var(--accent)',
+        color: strokeColor,
         weight: 2.5,
         dashArray: '5, 8',
         opacity: 0.95,
@@ -703,10 +723,11 @@ function renderPracticeProjection(pos, bearing) {
   }
 
   const segments = splitAntimeridianSegments(points);
+  const strokeColor = getAccentColor();
   for (const seg of segments) {
     if (seg.length >= 2) {
       window.L.polyline(seg, {
-        color: 'var(--accent)',
+        color: strokeColor,
         weight: 2.5,
         dashArray: '6, 8',
         opacity: 0.85,
