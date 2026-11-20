@@ -62,9 +62,10 @@ Pemain ditugaskan memprediksi posisi koordinat ISS pada rentang waktu 10 hingga 
 - **Helmet (v8.1.0):** Pengamanan HTTP header dengan Content Security Policy (CSP) ketat.
 - **Dotenv (v16.4.7):** Pengelolaan konfigurasi variabel lingkungan.
 
-### Database & Autentikasi
+### Database, Penyimpanan & Autentikasi
 - **Supabase (PostgreSQL):** Database relasional untuk penyimpanan profil, riwayat ronde, dan agregasi data melalui *Database Views*.
 - **Supabase Admin Auth:** Pendaftaran akun instan tanpa memerlukan verifikasi email manual.
+- **Penyimpanan Lokal (localStorage):** Persistensi sisi klien untuk preferensi tema (terang/gelap), draft koordinat tebakan yang belum dikunci, status sesi ronde aktif, penanda tutorial interaktif pemain, serta cache profil dan papan peringkat.
 
 ---
 
@@ -165,6 +166,7 @@ Papan peringkat menampilkan 20 pemain terbaik yang dihitung langsung melalui vie
 | Runtime Backend | Node.js 22.x |
 | Arsitektur Server | Express 5 di atas Vercel Serverless Function |
 | Database | PostgreSQL 15+ (Supabase) |
+| Penyimpanan Klien | Web Storage (localStorage) untuk tema, draft, sesi ronde, dan cache |
 | Horizon Tebakan | 10 – 30 Menit (600, 900, 1.200, 1.800 detik) |
 | Batas Waktu Ronde | 5 Menit (300 detik) |
 | Jeda Antar Ronde | 10 Detik |
