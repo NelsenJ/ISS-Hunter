@@ -54,10 +54,10 @@ Pemain ditugaskan memprediksi posisi koordinat ISS pada rentang waktu 10 hingga 
 
 ### Frontend
 - **Vanilla JavaScript (ES Modules):** Arsitektur modular murni tanpa *bundler* atau *build step*.
-- **HTML5 & CSS3:** Sistem token desain variabel CSS, flexbox, grid, dan komponen responsif dengan dukungan area aman perangkat seluler.
-- **Leaflet.js (v1.9.4):** Library pemetaan interaktif berbasis HTML5 Canvas (`preferCanvas: true`).
+- **HTML & CSS:** Sistem token desain variabel CSS, flexbox, grid, dan komponen responsif dengan dukungan area aman perangkat seluler.
+- **Leaflet.js (v1.9.4):** Library pemetaan interaktif berbasis Canvas (`preferCanvas: true`).
 - **CARTO Basemaps:** Penyedia ubin peta vektor (*Positron* untuk mode terang, *Dark Matter* untuk mode gelap).
-- **Supabase GoTrue Client:** Klien browser untuk pengelolaan sesi autentikasi berbasis JWT.
+- **Supabase Auth:** Klien browser untuk pengelolaan sesi autentikasi berbasis JWT.
 
 ### Backend
 - **Node.js 22 & Express.js 5:** REST API backend yang berjalan sebagai Serverless Function di Vercel.
@@ -99,20 +99,25 @@ Server Evaluasi Ground Truth SGP4 ◄── Pemain Kunci Tebakan (Maks 5 Menit)
 ### Rumus Jarak dan Skor
 
 #### 1. Rumus Haversine (Jarak Geodesik)
-Menghitung jarak terpendek antara koordinat tebakan $(\phi_1, \lambda_1)$ dan koordinat target ISS $(\phi_2, \lambda_2)$ di atas permukaan bola Bumi:
+Menghitung jarak terpendek antara titik tebakan pemain (lat1, lng1) dan posisi ISS (lat2, lng2) di atas permukaan bola Bumi (Radius Bumi R = 6.371 km):
 
-$$\Delta\phi = \phi_2 - \phi_1, \quad \Delta\lambda = \lambda_2 - \lambda_1$$
+```text
+Δlat = lat2 - lat1
+Δlng = lng2 - lng1
 
-$$a = \sin^2\left(\frac{\Delta\phi}{2}\right) + \cos(\phi_1)\cos(\phi_2)\sin^2\left(\frac{\Delta\lambda}{2}\right)$$
-
-$$d = 2 R \cdot \operatorname{atan2}\left(\sqrt{a}, \sqrt{1-a}\right) \quad (\text{Radius Bumi } R = 6.371\text{ km})$$
+a = sin²(Δlat / 2) + cos(lat1) * cos(lat2) * sin²(Δlng / 2)
+c = 2 * atan2(√a, √(1 - a))
+jarak_km = R * c
+```
 
 #### 2. Rumus Skor Ronde
-Skor dihitung menggunakan peluruhan eksponensial terhadap jarak selisih:
+Skor dihitung menggunakan model peluruhan eksponensial berdasarkan selisih jarak:
 
-$$\text{Skor} = \operatorname{round}\left(1000 \times e^{-\frac{d}{1500}}\right)$$
+```text
+skor = Math.round(1000 * Math.exp(-jarak_km / 1500))
+```
 
-| Jarak Selisih ($d$) | Skor | Evaluasi Prediksi |
+| Jarak Selisih | Skor | Evaluasi Prediksi |
 |---|---|---|
 | 0 km | 1.000 | Tepat sasaran (*Bullseye*) |
 | 100 km | 935 | Sangat presisi (*Sniper*) |
@@ -125,8 +130,8 @@ $$\text{Skor} = \operatorname{round}\left(1000 \times e^{-\frac{d}{1500}}\right)
 
 ### Sistem Level dan Lencana
 
-- **Formula Level:** $\text{Level} = \lfloor\text{Total Skor} / 2000\rfloor + 1$
-- **Formula Progres XP:** $\text{Progres XP} = \text{Total Skor} \pmod{2000} \text{ / } 2000\text{ XP}$
+- **Formula Level:** `Math.floor(total_skor / 2000) + 1`
+- **Formula Progres XP:** `(total_skor % 2000) / 2000 * 100%`
 
 | Lencana | Syarat Perolehan |
 |---|---|
