@@ -255,8 +255,7 @@ iss-hunter/
 ├── tests/                        # Pengujian unit otomatis (node:test)
 ├── eslint.config.js              # Konfigurasi linting ESLint
 ├── vercel.json                   # Konfigurasi serverless dan header Vercel
-├── package.json                  # Konfigurasi proyek dan dependensi
-└── .env.example                  # Contoh konfigurasi environment variable
+└── package.json                  # Konfigurasi proyek dan dependensi
 ```
 
 ---
