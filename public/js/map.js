@@ -278,25 +278,39 @@ let hasAutoCentered = false;
  * @param {number|null} [zoom=null]
  * @returns {boolean}
  */
-export function centerOnIss(zoom = null) {
+export function centerOnIss(zoom = null, immediate = false) {
   if (!mapInstance || !latestIssPos) return false;
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
   const defaultZoom = isMobile ? 2.5 : 3;
   const targetZoom = zoom !== null ? zoom : defaultZoom;
+
   if (typeof mapInstance.invalidateSize === 'function') {
     mapInstance.invalidateSize();
   }
-  if (typeof mapInstance.setView === 'function') {
-    mapInstance.setView([latestIssPos.lat, latestIssPos.lng], targetZoom, { animate: true });
-    if (isMobile) {
-      const bottomSheet = typeof document !== 'undefined' ? document.getElementById('bottom-sheet') : null;
-      if (bottomSheet && bottomSheet.dataset.state === 'expanded') {
-        const sheetHeight = bottomSheet.offsetHeight || 160;
-        if (typeof mapInstance.panBy === 'function') {
-          mapInstance.panBy([0, Math.round(sheetHeight / 3)], { animate: false });
-        }
-      }
+
+  let targetLatLng = [latestIssPos.lat, latestIssPos.lng];
+  if (
+    isMobile &&
+    typeof mapInstance.project === 'function' &&
+    typeof mapInstance.unproject === 'function'
+  ) {
+    const bottomSheet = typeof document !== 'undefined' ? document.getElementById('bottom-sheet') : null;
+    if (bottomSheet && bottomSheet.dataset.state === 'expanded') {
+      const sheetHeight = bottomSheet.offsetHeight || 160;
+      const pt = mapInstance.project(targetLatLng, targetZoom);
+      const offsetPt = pt.add([0, Math.round(sheetHeight / 3)]);
+      const offsetCoords = mapInstance.unproject(offsetPt, targetZoom);
+      targetLatLng = [offsetCoords.lat, offsetCoords.lng];
     }
+  }
+
+  if (!immediate && typeof mapInstance.flyTo === 'function') {
+    mapInstance.flyTo(targetLatLng, targetZoom, { duration: 0.6 });
+    return true;
+  }
+
+  if (typeof mapInstance.setView === 'function') {
+    mapInstance.setView(targetLatLng, targetZoom, { animate: true });
     return true;
   }
   return false;
@@ -435,6 +449,10 @@ export function setGuessMarker(coords) {
     }).addTo(mapInstance);
 
     guessMarker.on('dragend', (e) => {
+      // Abaikan event drag jika drag sedang dinonaktifkan
+      if (guessMarker && guessMarker.dragging && !guessMarker.dragging.enabled()) {
+        return;
+      }
       const pos = e.target.getLatLng();
       const clampedLat = Math.max(-90, Math.min(90, pos.lat));
       if (onMapClickCallback) {
@@ -446,6 +464,13 @@ export function setGuessMarker(coords) {
     });
   } else {
     guessMarker.setLatLng(latlng);
+    if (guessMarker.dragging && !guessMarker.dragging.enabled()) {
+      guessMarker.dragging.enable();
+    }
+    const markerEl = guessMarker.getElement();
+    if (markerEl) {
+      markerEl.style.cursor = 'pointer';
+    }
   }
 }
 
@@ -466,9 +491,16 @@ export function showRoundResult(guessCoords, answerCoords, horizonSeconds = 600)
   const visualAnswerLng = adjustRelativeLng(answerCoords.lng, guessCoords.lng);
   const visualAnswer = { lat: answerCoords.lat, lng: visualAnswerLng };
 
-  // Pastikan penanda tebakan terpasang dan beri tooltip
+  // Pastikan penanda tebakan terpasang, kunci drag saat review, dan beri tooltip
   setGuessMarker(guessCoords);
   if (guessMarker) {
+    if (guessMarker.dragging) {
+      guessMarker.dragging.disable();
+    }
+    const markerEl = guessMarker.getElement();
+    if (markerEl) {
+      markerEl.style.cursor = 'default';
+    }
     guessMarker.bindTooltip('Tebakanmu', {
       permanent: true,
       direction: 'top',

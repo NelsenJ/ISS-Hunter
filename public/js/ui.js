@@ -93,6 +93,10 @@ export function getActiveTab() {
 function startCountdownTimer(startedAt) {
   if (countdownTimer) return;
   countdownTimer = setInterval(() => {
+    if (getState().roundStatus !== 'active') {
+      stopCountdownTimer();
+      return;
+    }
     const el = document.getElementById('countdown-timer-value');
     const text = formatRemainingTime(startedAt);
     if (el) el.textContent = text;
@@ -1332,7 +1336,14 @@ async function startNewRoundAction(triggerBtn = null) {
 
   isStartingRound = true;
 
-  // Pasang animasi spinner loading dan status disabled pada tombol pemicu
+  // 1. Bersihkan hasil ronde lama & titik tebakan seketika
+  clearRoundResult();
+  clearDraftGuess();
+
+  // 2. Langsung arahkan kamera peta ke orbit ISS sekarang tanpa jeda/menunggu respons server
+  centerOnIss();
+
+  // 3. Pasang animasi spinner loading dan status disabled pada tombol pemicu
   const targetButtons = triggerBtn
     ? [triggerBtn]
     : Array.from(document.querySelectorAll('#start-round-btn'));
@@ -1347,17 +1358,13 @@ async function startNewRoundAction(triggerBtn = null) {
   }
 
   try {
-    clearRoundResult();
-    clearDraftGuess();
     // Tidak mengirim horizon_seconds — server akan memilih acak (10–30 menit)
     const roundData = await startRound(state.token, { difficulty: 'normal' });
     setActiveRound(roundData);
     const roundHorizon = roundData.horizonSeconds || DEFAULT_HORIZON_SECONDS;
     setTrailHorizon(roundHorizon);
 
-    // Pusatkan peta ke ISS & orbitnya langsung saat ronde baru dimulai (di HP maupun laptop)
-    centerOnIss();
-
+    // Pastikan posisi dan lintasan terbaru tetap sinkron di tengah layar
     fetchCurrentIssPosition()
       .then((pos) => {
         updateIssPosition(pos);
@@ -1396,24 +1403,30 @@ async function lockGuessAction() {
 
   setRoundStatus('submitting');
   stopCountdownTimer();
+
+  let result;
   try {
-    const result = await submitGuess(roundId, coords, state.token);
-    showRoundResult(rawCoords, { lat: result.answer.lat, lng: result.answer.lng }, horizonSec);
-    setRoundStatus('result', result);
-    clearDraftGuess();
-
-    // Tampilkan pop-up jika pemain mendapatkan lencana baru
-    if (result.newBadges && result.newBadges.length > 0) {
-      showNewBadgesPopup(result.newBadges);
-    }
-
-    const meData = await getMe(state.token);
-    setPlayerData(meData.player, meData.stats);
-
-    getLeaderboard(state.leaderboardType || 'monthly')
-      .then((data) => setLeaderboardData(data))
-      .catch(() => {});
+    result = await submitGuess(roundId, coords, state.token);
   } catch (err) {
     setRoundStatus('idle', null, err.message || 'Gagal mengunci tebakan.');
+    return;
   }
+
+  showRoundResult(rawCoords, { lat: result.answer.lat, lng: result.answer.lng }, horizonSec);
+  setRoundStatus('result', result);
+  clearDraftGuess();
+
+  // Tampilkan pop-up jika pemain mendapatkan lencana baru
+  if (result.newBadges && result.newBadges.length > 0) {
+    showNewBadgesPopup(result.newBadges);
+  }
+
+  // Sinkronisasi data profil dan papan peringkat di latar belakang tanpa menginterupsi hasil review
+  getMe(state.token)
+    .then((meData) => setPlayerData(meData.player, meData.stats))
+    .catch((err) => console.warn('Gagal memperbarui profil pemain:', err.message));
+
+  getLeaderboard(state.leaderboardType || 'monthly')
+    .then((data) => setLeaderboardData(data))
+    .catch(() => {});
 }

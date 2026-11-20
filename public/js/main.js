@@ -6,6 +6,7 @@ import { initTheme, toggleTheme } from './theme.js';
 import { getConfig, getHealth, getMe, getActiveRound } from './api.js';
 import { initAuth, onAuthStateChange, getSession, signOut } from './auth.js';
 import {
+  getState,
   subscribe,
   setConfigured,
   setAuthSessionWithPlayer,
@@ -95,23 +96,31 @@ async function start() {
             const meData = await getMe(session.access_token);
             setAuthSessionWithPlayer(session.user, session.access_token, meData.player, meData.stats);
 
-            // Pulihkan ronde aktif dari server sebagai sumber kebenaran
-            try {
-              const activeRound = await getActiveRound(session.access_token);
-              if (activeRound) {
-                setActiveRound(activeRound);
-                const savedDraft = loadSavedDraftGuess();
-                if (savedDraft) {
-                  setDraftGuess(savedDraft);
-                  setGuessMarker(savedDraft);
+            // Pulihkan ronde aktif dari server sebagai sumber kebenaran,
+            // HANYA JIKA pemain tidak sedang dalam sesi review ('result') atau submitting
+            const currentRoundStatus = getState().roundStatus;
+            if (currentRoundStatus !== 'result' && currentRoundStatus !== 'submitting') {
+              try {
+                const activeRound = await getActiveRound(session.access_token);
+                // Cek ulang status setelah panggilan asinkron
+                const freshStatus = getState().roundStatus;
+                if (freshStatus !== 'result' && freshStatus !== 'submitting') {
+                  if (activeRound) {
+                    setActiveRound(activeRound);
+                    const savedDraft = loadSavedDraftGuess();
+                    if (savedDraft) {
+                      setDraftGuess(savedDraft);
+                      setGuessMarker(savedDraft);
+                    }
+                  } else {
+                    setActiveRound(null);
+                    clearDraftGuess();
+                    setGuessMarker(null);
+                  }
                 }
-              } else {
-                setActiveRound(null);
-                clearDraftGuess();
-                setGuessMarker(null);
+              } catch (roundErr) {
+                console.warn('Gagal memulihkan status ronde aktif:', roundErr.message);
               }
-            } catch (roundErr) {
-              console.warn('Gagal memulihkan status ronde aktif:', roundErr.message);
             }
           } catch (err) {
             if (err.code === 'PROFILE_REQUIRED' || err.status === 404) {
