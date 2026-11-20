@@ -49,23 +49,28 @@ Pemain ditugaskan memprediksi posisi koordinat ISS pada rentang waktu 10 hingga 
 
 ## Teknologi yang Digunakan
 
-### Frontend
+### Front End
 - **Vanilla JavaScript (ES Modules):** Arsitektur modular murni tanpa *bundler* atau *build step*.
 - **HTML & CSS:** Sistem token desain variabel CSS, flexbox, grid, dan komponen responsif dengan dukungan area aman perangkat seluler.
 - **Leaflet.js (v1.9.4):** Library pemetaan interaktif berbasis Canvas (`preferCanvas: true`).
-- **CARTO Basemaps:** Penyedia ubin peta vektor (*Positron* untuk mode terang, *Dark Matter* untuk mode gelap).
-- **Supabase Auth:** Klien browser untuk pengelolaan sesi autentikasi berbasis JWT.
+- **Penyimpanan Lokal (localStorage):** Persistensi sisi klien untuk preferensi tema (terang/gelap), draft koordinat tebakan yang belum dikunci, status sesi ronde aktif, penanda tutorial interaktif pemain, serta cache profil dan papan peringkat.
+- **Supabase Auth:** Klien browser untuk pengelolaan sesi autentikasi pengguna berbasis JWT.
 
-### Backend
+### Back End
 - **Node.js 22 & Express.js 5:** REST API backend yang berjalan sebagai Serverless Function di Vercel.
-- **satellite.js (v7.2.0):** Komputasi propagasi orbit SGP4/SDP4 dari data Two-Line Elements (TLE).
+- **satellite.js (v7.2.0):** Komputasi propagasi orbit satelit SGP4/SDP4 dari data Two-Line Elements (TLE).
 - **Helmet (v8.1.0):** Pengamanan HTTP header dengan Content Security Policy (CSP) ketat.
 - **Dotenv (v16.4.7):** Pengelolaan konfigurasi variabel lingkungan.
 
-### Database, Penyimpanan & Autentikasi
-- **Supabase (PostgreSQL):** Database relasional untuk penyimpanan profil, riwayat ronde, dan agregasi data melalui *Database Views*.
-- **Supabase Admin Auth:** Pendaftaran akun instan tanpa memerlukan verifikasi email manual.
-- **Penyimpanan Lokal (localStorage):** Persistensi sisi klien untuk preferensi tema (terang/gelap), draft koordinat tebakan yang belum dikunci, status sesi ronde aktif, penanda tutorial interaktif pemain, serta cache profil dan papan peringkat.
+### Database
+- **Supabase (PostgreSQL):** Database relasional untuk penyimpanan data profil pemain (`profiles`), riwayat dan status ronde (`rounds`), serta agregasi statistik performa melalui *Database Views* (`player_stats`, `leaderboard_monthly`, `leaderboard_weekly`, `leaderboard_daily`).
+- **Supabase Admin Auth:** Sistem autentikasi pengguna berbasis JWT dengan verifikasi akun instan (`email_confirm: true`).
+
+### API
+- **Internal Express REST API:** Endpoint backend aplikasi untuk inisiasi ronde, verifikasi tebakan posisi, kalkulasi skor jarak, profil pemain, dan papan peringkat (`/api/*`).
+- **CelesTrak NORAD GP API:** Pengambilan data orbit Two-Line Elements (TLE) terkini untuk satelit ISS (NORAD ID: `25544`) dengan mekanisme *Stale-While-Revalidate* in-memory dan cache berkas lokal.
+- **WhereTheISS API:** Sumber data sekunder untuk sinkronisasi posisi *real-time* satelit ISS.
+- **CARTO Basemap Tile API:** Penyedia ubin peta vektor resolusi tinggi (varian *Positron* untuk mode terang dan *Dark Matter* untuk mode gelap).
 
 ---
 
